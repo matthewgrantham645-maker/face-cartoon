@@ -1,17 +1,17 @@
 (function(root){
   'use strict';
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,Number.isFinite(Number(v))?Number(v):a));
-  const defaults={skinTone:'#fac7a5',hairColor:'#252426',hairStyle:'wavy',hairVolume:1.12,faceWidth:1,jawWidth:.94,faceLength:1,eyeSize:1,eyeSpacing:1,browThickness:1,glasses:true,glassesShape:'rounded',glassesColor:'#19191b',shirtColor:'#28282b'};
+  const defaults={skinTone:'#fac7a5',hairColor:'#252426',hairStyle:'wavy',hairVolume:1.08,faceWidth:1,jawWidth:.94,faceLength:1,eyeSize:1,eyeSpacing:1,browThickness:1,glasses:true,glassesShape:'rounded',glassesColor:'#28272b',shirtColor:'#28282b',eyeTilt:0,noseLength:1,mouthWidth:1,browArch:1,hairPart:.1,detail:1};
   function sanitize(input={}){
     const out={...defaults};
     for(const key of ['skinTone','hairColor','glassesColor','shirtColor'])if(/^#[0-9a-f]{6}$/i.test(input[key]||''))out[key]=input[key];
-    for(const [key,lo,hi] of [['hairVolume',.8,1.4],['faceWidth',.82,1.2],['jawWidth',.75,1.18],['faceLength',.86,1.15],['eyeSize',.7,1.4],['eyeSpacing',.85,1.2],['browThickness',.7,1.5]])if(typeof input[key]==='number')out[key]=clamp(input[key],lo,hi);
+    for(const [key,lo,hi] of [['hairVolume',.8,1.4],['faceWidth',.82,1.2],['jawWidth',.75,1.18],['faceLength',.86,1.15],['eyeSize',.7,1.4],['eyeSpacing',.85,1.2],['browThickness',.7,1.5],['eyeTilt',-.2,.2],['noseLength',.8,1.2],['mouthWidth',.75,1.3],['browArch',.6,1.4],['hairPart',-.6,.6],['detail',0,1]])if(typeof input[key]==='number')out[key]=clamp(input[key],lo,hi);
     if(typeof input.glasses==='boolean')out.glasses=input.glasses;
     if(['wavy','short','straight'].includes(input.hairStyle))out.hairStyle=input.hairStyle;
     if(['rounded','round'].includes(input.glassesShape))out.glassesShape=input.glassesShape;
     return out;
   }
-  const neutral=()=>({eyeL:1,eyeR:1,mouth:0,smile:0,pucker:0,yaw:0,pitch:0,roll:0,gazeX:0,gazeY:0,brow:0});
+  const neutral=()=>({eyeL:1,eyeR:1,mouth:0,smile:0,pucker:0,yaw:0,pitch:0,roll:0,gazeX:0,gazeY:0,brow:0,browL:0,browR:0});
   function pose(values={}){const p=neutral();for(const key in p)if(Number.isFinite(values[key]))p[key]=clamp(values[key],['eyeL','eyeR','mouth','pucker'].includes(key)?0:-1,1);return p;}
   function shade(hex,factor){return '#'+[1,3,5].map(i=>Math.round(clamp(parseInt(hex.slice(i,i+2),16)*factor,0,255)).toString(16).padStart(2,'0')).join('');}
   function render(ctx,appearance,values,w,h){
@@ -104,14 +104,21 @@
     a.faceWidth=clamp(faceWidth/faceHeight/.79,.82,1.2);
     a.eyeSpacing=clamp(d(33,263)/faceWidth/.57,.85,1.2);
     a.jawWidth=clamp(d(172,397)/faceWidth/ .87,.75,1.18);
+    a.mouthWidth=clamp(d(61,291)/faceWidth/.37,.75,1.3);
+    a.noseLength=clamp(d(168,2)/faceHeight/.30,.8,1.2);
+    const angle=(i,j)=>Math.atan2((points[j].y-points[i].y)*height,(points[j].x-points[i].x)*width);
+    const level=angle(33,263);
+    a.eyeTilt=clamp((angle(33,133)-level-angle(362,263)+level)/2,-.2,.2);
     if(rgba){
       const colors=[];
       for(const i of [50,280,151]){const x=Math.round(points[i].x*width),y=Math.round(points[i].y*height);for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
         const xx=x+dx,yy=y+dy;if(xx<0||xx>=width||yy<0||yy>=height)continue;
         const offset=(yy*width+xx)*4,c=Array.from(rgba.slice(offset,offset+3));if(Math.max(...c)>90&&Math.min(...c)<240)colors.push(c);
       }}
-      if(colors.length){const rgb=[0,1,2].map(k=>Math.round(colors.reduce((s,c)=>s+c[k],0)/colors.length));
-        a.skinTone='#'+rgb.map(v=>Math.round(v*.8+245*.2).toString(16).padStart(2,'0')).join('');}
+      if(colors.length){const rgb=[0,1,2].map(k=>colors.map(c=>c[k]).sort((a,b)=>a-b)[Math.floor(colors.length/2)]);
+        // Preserve chroma instead of whitening every face with the same RGB gray.
+        const lum=.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2],gain=clamp(185/Math.max(75,lum),1,1.25);
+        a.skinTone='#'+rgb.map(v=>Math.round(clamp(v*gain,0,255)).toString(16).padStart(2,'0')).join('');}
     }
     return sanitize(a);
   }
