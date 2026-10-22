@@ -8,8 +8,9 @@ assert.equal(q.ParamAngleX,12);assert.equal(q.ParamAngleY,6);assert.equal(q.Para
 assert.equal(q.ParamEyeLOpen,.9);assert.equal(q.ParamEyeROpen,.1);
 assert.equal(q.ParamMouthOpenY,.7);assert.equal(q.ParamMouthForm,.55);assert.equal(q.ParamEyeBallX,.8);
 assert(Math.abs(q.ParamBodyAngleX-3.6)<1e-8);
-assert.equal(mesh.mapPose(p).angleX,q.ParamAngleX);assert.equal(mesh.mapPose(p).angleY,q.ParamAngleY);assert.equal(mesh.mapPose(p).angleZ,-q.ParamAngleZ,'mesh and Cubism roll have opposite parameter signs for the same visual direction');
-assert.equal(mesh.mapPose(p).bodyAngleX,q.ParamBodyAngleX);
+assert(mesh.mapPose(p).angleX>0&&mesh.mapPose(p).angleX<q.ParamAngleX);assert(mesh.mapPose(p).angleY>0&&mesh.mapPose(p).angleY<q.ParamAngleY);
+assert(Math.abs(mesh.mapPose(p).angleZ+q.ParamAngleZ*.8)<1e-9,'mesh roll is limited and reverses the Cubism parameter sign');
+assert(mesh.mapPose(p).bodyAngleX<q.ParamBodyAngleX);
 assert.equal(live2dParameters(p,0).ParamBodyAngleX,0);
 const radians=fromKalido({head:{x:Math.PI/6,y:-Math.PI/6,z:Math.PI/12}});assert(Math.abs(radians.yaw+1)<1e-12);assert(Math.abs(radians.roll+.5)<1e-12);
 let called=0;const blink=fromKalido(r,(e,y)=>{called++;assert.equal(y,.2);return{l:0,r:1};});assert.equal(called,1);assert.equal(blink.eyeR,0);assert.equal(blink.eyeL,1);assert.deepEqual(r.eye,{l:.9,r:.1});

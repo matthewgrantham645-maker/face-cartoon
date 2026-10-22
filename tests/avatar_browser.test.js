@@ -20,6 +20,7 @@ async function setSlider(page,id,value){await page.locator('#'+id).evaluate((el,
   for(const [name,id,value]of [['left','yaw',-1],['right','yaw',1],['blink','eyeL',0],['mouth','mouth',1]]){
    await setSlider(page,id,value);await page.locator('#meshCanvas').screenshot({path:path.join(out,name+'.png')});await setSlider(page,id,id.startsWith('eye')?1:0);
   }
+  await setSlider(page,'yaw',1);await setSlider(page,'pitch',1);await page.locator('#meshCanvas').screenshot({path:path.join(out,'safe-combined-turn.png')});await setSlider(page,'yaw',0);await setSlider(page,'pitch',0);
   await page.locator('#celLight').check();await sleep(300);await page.locator('#meshCanvas').screenshot({path:path.join(out,'cel.png')});await page.locator('#celLight').uncheck();
   await page.selectOption('#renderMode','parameter');await assert.doesNotReject(()=>page.locator('#avatar').waitFor({state:'visible'}));
   await page.selectOption('#renderMode','illustration');await page.selectOption('#renderFPS','60');
@@ -42,7 +43,19 @@ async function setSlider(page,id,value){await page.locator('#'+id).evaluate((el,
    navigator.mediaDevices.getUserMedia=async()=>c.captureStream(30);window.addEventListener('pagehide',()=>clearInterval(timer));
   });
   await page.selectOption('#trackingProfile','calibrated');await page.click('#camera');await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('校准完成'),{timeout:20000});
-  await page.evaluate(()=>testFace.set(0,.07));await sleep(500);assert(Number(await page.locator('#eyeL').inputValue())<.05);assert(Number(await page.locator('#mouth').inputValue())>.6);await page.click('#stop');assert(await page.locator('#capture').isDisabled());
+  await page.evaluate(()=>testFace.set(0,.07));await sleep(500);assert(Number(await page.locator('#eyeL').inputValue())<.05);assert(Number(await page.locator('#mouth').inputValue())>.6);await page.evaluate(()=>testFace.set(1,.012));await sleep(500);assert(Number(await page.locator('#mouth').inputValue())>.25,'small openings must respond');
+  await page.click('#calibrateMouth');await page.waitForFunction(()=>!AvatarDiagnostics.snapshot().mouthResponse.calibrating);await sleep(250);assert(Number(await page.locator('#mouth').inputValue())<.04);
+  await page.evaluate(()=>testFace.set(1,.025));await sleep(500);assert(Number(await page.locator('#mouth').inputValue())>.3);
+  await page.evaluate(()=>testFace.set(1,.002));
+  await page.locator('summary').filter({hasText:'照片提取预览'}).click();await page.click('#capture');await page.waitForFunction(()=>!document.querySelector('#photoPreview').hidden);
+  assert(await page.evaluate(()=>IllustratedAvatar.active));assert.equal(await page.locator('#renderMode').inputValue(),'illustration');
+  await page.click('#discardPhoto');assert(await page.locator('#photoPreview').isHidden());assert(await page.evaluate(()=>IllustratedAvatar.active));
+  await page.click('#capture');await page.waitForFunction(()=>!document.querySelector('#photoPreview').hidden);await page.click('#applyPhoto');assert.equal(await page.locator('#renderMode').inputValue(),'parameter');
+  await page.selectOption('#renderMode','illustration');
+  await page.evaluate(()=>{window.savedPhotoSolve=Kalidokit.Face.solve;Kalidokit.Face.solve=()=>({head:{x:0,y:.8,z:0},mouth:{x:0,y:0}});});
+  await page.click('#capture');await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('侧脸提取容易失真'));assert(await page.evaluate(()=>IllustratedAvatar.active));assert(await page.locator('#photoPreview').isHidden());
+  await page.evaluate(()=>{Kalidokit.Face.solve=savedPhotoSolve;});
+  await page.click('#stop');assert(await page.locator('#capture').isDisabled());
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'mobile.png'),fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
   assert.deepEqual(errors,[]);
   const fallback=await browser.newPage();await fallback.addInitScript(()=>{const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type==='webgl2'?null:original.call(this,type,...args);};});

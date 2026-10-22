@@ -111,14 +111,19 @@
     a.eyeTilt=clamp((angle(33,133)-level-angle(362,263)+level)/2,-.2,.2);
     if(rgba){
       const colors=[];
-      for(const i of [50,280,151]){const x=Math.round(points[i].x*width),y=Math.round(points[i].y*height);for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+      // Cheek samples avoid forehead hair. Gray background, glare and deep
+      // shadows must not replace a usable illustration tone with muddy gray.
+      for(const i of [50,101,118,280,330,347]){const x=Math.round(points[i].x*width),y=Math.round(points[i].y*height);for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
         const xx=x+dx,yy=y+dy;if(xx<0||xx>=width||yy<0||yy>=height)continue;
-        const offset=(yy*width+xx)*4,c=Array.from(rgba.slice(offset,offset+3));if(Math.max(...c)>90&&Math.min(...c)<240)colors.push(c);
+        const offset=(yy*width+xx)*4,c=Array.from(rgba.slice(offset,offset+3));if(c[0]>c[1]+3&&c[0]>c[2]+8&&Math.max(...c)>65&&Math.min(...c)<230)colors.push(c);
       }}
-      if(colors.length){const rgb=[0,1,2].map(k=>colors.map(c=>c[k]).sort((a,b)=>a-b)[Math.floor(colors.length/2)]);
-        // Preserve chroma instead of whitening every face with the same RGB gray.
-        const lum=.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2],gain=clamp(185/Math.max(75,lum),1,1.25);
-        a.skinTone='#'+rgb.map(v=>Math.round(clamp(v*gain,0,255)).toString(16).padStart(2,'0')).join('');}
+      if(colors.length>=30){
+        const lum=c=>.2126*c[0]+.7152*c[1]+.0722*c[2];colors.sort((a,b)=>lum(a)-lum(b));
+        const measured=lum(colors[Math.floor(colors.length*.65)]);
+        const palette=['#6b4435','#8c5a43','#b57d59','#d99c75','#edb68e','#f5c9a5','#ffdab7'];
+        const light=hex=>lum([1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)));
+        a.skinTone=palette.reduce((best,c)=>Math.abs(light(c)-measured)<Math.abs(light(best)-measured)?c:best,palette[0]);
+      }
     }
     return sanitize(a);
   }

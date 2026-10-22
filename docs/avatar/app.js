@@ -8,7 +8,8 @@
   let lastTick=performance.now(),lastUI=0,startAt=0,lastSent=0,lastVideo=-1,lastFace=0;
   let latestPoints=null,pendingFrame=null,purpose='live',frameResult=null,starting=false,generating=false,epoch=0;
   let calibrating=false,frameCount=0,lastReport=0,inferenceMS=0,inputCount=0,poseSequence=0;
-  const motion=new AvatarMotion.MotionDriver();
+  const motion=new AvatarMotion.MotionDriver(),mouthDriver=new AvatarFaceResponse.MouthDriver();
+  let pendingAppearance=null,pendingOrigin='';
   const mediaRoot='https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/';
   const say=text=>$('status').textContent=text;
   try{const stored=localStorage.getItem('flat-avatar-v2');if(stored){appearance=A.sanitize(JSON.parse(stored));$('origin').textContent='当前：已保存的角色参数。';}}catch{}
@@ -17,13 +18,15 @@
   function setMode(next){mode=next;for(const id of ['manual','demo','camera'])$(id).classList.toggle('active',id===next);if(next==='manual')say('手动控制 · 滑块改变眼睑、嘴型和姿态的曲线。');if(next==='demo'){startAt=performance.now();say('自动演示 · 预设表情与转头，不代表正在跟踪。');}}
   function reset(){target=A.neutral();setMode('manual');syncPose();}
   function syncPose(){for(const name of poseFields){$(name).value=shown[name];$(name+'Value').textContent=shown[name].toFixed(2);}}
-  function stop(){epoch++;if(stream)stream.getTracks().forEach(track=>track.stop());stream=null;video.srcObject=null;latestPoints=null;motion.beginCalibration();calibrating=false;$('capture').disabled=$('calibrate').disabled=$('stop').disabled=true;if(mode==='camera'){reset();say('摄像头已关闭。');}updateEngine();}
+  function stop(){epoch++;if(stream)stream.getTracks().forEach(track=>track.stop());stream=null;video.srcObject=null;latestPoints=null;motion.beginCalibration();mouthDriver.reset();calibrating=false;$('capture').disabled=$('calibrate').disabled=$('calibrateMouth').disabled=$('stop').disabled=true;if(mode==='camera'){reset();say('摄像头已关闭。');}updateEngine();}
   const isOfficial=()=>$('trackingProfile').value==='official';
   function profileControls(){
     const official=isOfficial();
     $('calibrate').disabled=!stream||official;
-    for(const id of ['eyeGain','mouthGain','motionGain'])$(id).disabled=official;
-    $('profileHelp').textContent=official?'参考官方映射：使用 KalidoKit 的眼睛、嘴型、视线和头部角度；无需个人校准。':'个人校准：开启后保持正面、睁眼、闭嘴约 1–2 秒；幅度调节对这个模式生效。';
+    $('calibrateMouth').disabled=!stream;
+    for(const id of ['eyeGain','motionGain'])$(id).disabled=official;
+    $('mouthGain').disabled=false;
+    $('profileHelp').textContent=official?'KalidoKit 姿态与眼睛映射，下方可启用小幅张嘴增强。灵敏度对两种映射均生效；闭嘴不归零时点“校准闭嘴”。':'个人校准：开启后保持正面、睁眼、闭嘴约 1–2 秒；可独立调整张嘴灵敏度。';
   }
   function calibrate(){motion.beginCalibration();calibrating=!isOfficial();target=A.neutral();profileControls();say(calibrating?'正在校准：请正视镜头、睁眼、闭嘴约 1–2 秒。':'参考官方映射已接入 · 可以眨眼、说话、转头和移动视线。');}
   function receive(results){
@@ -39,7 +42,12 @@
     if(![solved.head?.x,solved.head?.y,solved.head?.z,solved.mouth?.x,solved.mouth?.y].every(Number.isFinite))return;
     const wasCalibrating=calibrating,now=performance.now();
     const result=isOfficial()?{pose:AvatarKalido.fromKalido(solved,Kalidokit.Face.stabilizeBlink?((eyes,y)=>Kalidokit.Face.stabilizeBlink(eyes,y)):undefined),calibrating:false}:motion.update(latestPoints,solved,{width:video.videoWidth,height:video.videoHeight},now);
-    if(!result)return;lastFace=now;frameCount++;inputCount++;target=A.pose(result.pose);calibrating=result.calibrating;
+    if(!result)return;lastFace=now;frameCount++;inputCount++;calibrating=result.calibrating;
+    if(wasCalibrating&&!calibrating)mouthDriver.setBaseline(motion.baseline?.aperture);
+    const wasMouthCalibrating=!!mouthDriver.samples;
+    const mouth=mouthDriver.update(latestPoints,{width:video.videoWidth,height:video.videoHeight},result.pose.mouth,Number($('mouthGain').value),$('sensitiveMouth').checked);
+    target=A.pose({...result.pose,mouth:calibrating?0:mouth});
+    if(wasMouthCalibrating&&!mouthDriver.samples)say('闭嘴校准完成 · 小幅张嘴即可驱动口型。');
     if(result.warning)say(result.warning);
     if(wasCalibrating&&!calibrating){frameCount=0;lastReport=now;say('个人校准完成 · 可以眨眼、说话、转头和移动视线。');}
   }
@@ -75,10 +83,14 @@
   function snapshot(source){const out=document.createElement('canvas');const iw=source.videoWidth||source.naturalWidth||source.width,ih=source.videoHeight||source.naturalHeight||source.height;
     if(!iw||!ih)throw Error('照片尚未准备好。');const fit=Math.min(1,960/iw,1280/ih);out.width=Math.max(1,Math.round(iw*fit));out.height=Math.max(1,Math.round(ih*fit));out.getContext('2d').drawImage(source,0,0,out.width,out.height);return out;}
   async function generateFrom(source){
-    if(generating||starting)return;generating=true;$('capture').disabled=true;$('upload').disabled=true;say('正在检测照片中的人脸并生成角色…');
+    if(generating||starting)return;generating=true;pendingAppearance=null;$('photoPreview').hidden=true;$('capture').disabled=true;$('upload').disabled=true;say('正在提取照片并准备预览，当前角色保持不变…');
     try{
       const photo=snapshot(source);await loadTracker();if(pendingFrame)await pendingFrame;
       const points=await send(photo,'capture');if(!points)throw Error('照片中没有检测到清晰人脸，请使用正面、单人照片。');
+      const width=Math.abs(points[454].x-points[234].x),height=Math.abs(points[152].y-points[10].y);
+      if(width<.14||height<.18)throw Error('照片中的人脸太小，请靠近镜头再拍；当前角色已保留。');
+      const photoPose=A.solveFace(points,{width:photo.width,height:photo.height},Kalidokit);
+      if(!photoPose||![photoPose.head?.x,photoPose.head?.y].every(Number.isFinite)||Math.abs(photoPose.head.y)>.45||Math.abs(photoPose.head.x)>.4)throw Error('请使用正面、平视的照片，侧脸提取容易失真；当前角色已保留。');
       const pixels=photo.getContext('2d').getImageData(0,0,photo.width,photo.height).data;
       let candidate=A.estimateAppearance(points,photo.width,photo.height,pixels,appearance);
       const dataURL=photo.toDataURL('image/jpeg',.86);let ai=false,warning='';
@@ -92,10 +104,10 @@
           candidate=A.sanitize({...candidate,...result.appearance,faceWidth:candidate.faceWidth,jawWidth:candidate.jawWidth,eyeSpacing:candidate.eyeSpacing,eyeTilt:candidate.eyeTilt,noseLength:candidate.noseLength,mouthWidth:candidate.mouthWidth});ai=true;
         }catch(error){warning=' DeepSeek 分析未成功，本次使用本地比例生成。';$('apiStatus').textContent=warning+' '+error.message;console.warn(error.message);}
       }
-      appearance=candidate;syncLook();remember();window.IllustratedAvatar?.useParameters();$('snapshot').src=dataURL;$('snapshot').style.display='block';
-      $('origin').textContent=ai?'当前：照片测量比例 + DeepSeek 外观分析生成。':'当前：照片测量比例与近似肤色生成；发型和眼镜沿用设置，可手动调整。';
-      say('角色已生成。'+(ai?'可以继续面捕或微调形象。':'本地模式尚不自动识别发型和眼镜，可展开“微调形象”。')+warning);
-      if(mode==='camera')calibrate();
+      pendingAppearance=candidate;pendingOrigin=ai?'当前：照片比例 + DeepSeek 外观参数，经预览后应用。':'当前：照片提取的简化参数角色，经预览后应用。';
+      $('snapshot').src=dataURL;$('snapshot').style.display='block';
+      const preview=$('photoPreviewCanvas');A.render(preview.getContext('2d'),candidate,A.neutral(),preview.width,preview.height);$('photoPreview').hidden=false;
+      say('提取预览已准备好，当前插画保持不变。此预览是简化模板，不是高质量插画生成。'+warning);
     }catch(error){say(error.message);console.error(error);}finally{generating=false;$('capture').disabled=!stream;$('upload').disabled=false;}
   }
   function tick(now){
@@ -125,17 +137,20 @@
   }
   for(const name of poseFields)$(name).addEventListener('input',()=>{setMode('manual');target=A.pose({...shown,...Object.fromEntries(poseFields.map(k=>[k,Number($(k).value)]))});updateEngine();});
   for(const name of lookFields)$(name).addEventListener('input',()=>{appearance=A.sanitize({...appearance,[name]:name==='glasses'?$(name).checked:['faceWidth','hairVolume','detail','hairPart','eyeSize','noseLength','mouthWidth'].includes(name)?Number($(name).value):$(name).value});remember();});
-  for(const id of ['eyeGain','mouthGain','motionGain'])$(id).addEventListener('input',()=>motion.setOptions({[id]:Number($(id).value)}));
+  for(const id of ['eyeGain','motionGain'])$(id).addEventListener('input',()=>motion.setOptions({[id]:Number($(id).value)}));
   $('trackingProfile').addEventListener('change',()=>{profileControls();if(stream&&mode==='camera')calibrate();});
   $('manual').onclick=()=>{setMode('manual');target={...shown};syncPose();updateEngine();};$('demo').onclick=()=>{setMode('demo');updateEngine();};$('camera').onclick=startCamera;
   $('reset').onclick=()=>{reset();syncPose();updateEngine();};$('stop').onclick=stop;$('calibrate').onclick=()=>{setMode('camera');calibrate();updateEngine();};
   $('capture').onclick=()=>generateFrom(video);
+  $('calibrateMouth').onclick=()=>{if(!stream)return;setMode('camera');mouthDriver.calibrate();say('请自然闭嘴约半秒，正在校准嘴部零点…');updateEngine();};
+  $('applyPhoto').onclick=()=>{if(!pendingAppearance)return;appearance=pendingAppearance;pendingAppearance=null;syncLook();remember();window.IllustratedAvatar?.useParameters();$('origin').textContent=pendingOrigin;$('photoPreview').hidden=true;say('已应用预览中的参数角色。可在角色类型中切回二维插画。');};
+  $('discardPhoto').onclick=()=>{pendingAppearance=null;$('photoPreview').hidden=true;say('已保留当前角色，提取结果未应用。');};
   $('upload').onchange=async event=>{const file=event.target.files[0];if(!file)return;if(file.size>12*1024*1024){say('请上传小于 12 MB 的照片。');event.target.value='';return;}const url=URL.createObjectURL(file);try{const img=new Image();img.src=url;await img.decode();await generateFrom(img);}catch(error){say('无法读取照片：'+error.message);}finally{URL.revokeObjectURL(url);event.target.value='';}};
   $('defaultLook').onclick=()=>{appearance=A.sanitize();syncLook();remember();$('origin').textContent='当前：默认角色，尚未从照片生成。';};
   function download(href,name){const a=document.createElement('a');a.href=href;a.download=name;a.click();}
   $('savePNG').onclick=()=>download((window.IllustratedAvatar?.active?window.IllustratedAvatar.canvas:canvas).toDataURL('image/png'),'my-flat-avatar.png');
   $('saveConfig').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:3,appearance},null,2)],{type:'application/json'}));download(url,'my-avatar.json');setTimeout(()=>URL.revokeObjectURL(url),1000);};
-  window.AvatarDiagnostics={snapshot:()=>({version:5,mode,profile:$('trackingProfile').value,sequence:poseSequence,inputCount,calibrating,inferenceMS,inputAgeMS:mode==='camera'?Math.round(performance.now()-lastFace):null,pose:{...shown},target:{...target},mesh:window.AvatarMeshBridge.mapPose(shown,Number($('bodyFollow').value)),reference:window.Live2DReference?.snapshot()||null})};
+  window.AvatarDiagnostics={snapshot:()=>({version:6,mode,profile:$('trackingProfile').value,sequence:poseSequence,inputCount,calibrating,inferenceMS,inputAgeMS:mode==='camera'?Math.round(performance.now()-lastFace):null,pose:{...shown},target:{...target},mouthResponse:mouthDriver.snapshot(),mesh:window.AvatarMeshBridge.mapPose(shown,Number($('bodyFollow').value),Number($('turnStrength').value)),reference:window.Live2DReference?.snapshot()||null})};
   $('saveDiagnostics').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(window.AvatarDiagnostics.snapshot(),null,2)],{type:'application/json'}));download(url,'avatar-motion-diagnostics.json');setTimeout(()=>URL.revokeObjectURL(url),1000);};
   window.addEventListener('pagehide',stop);
   fetch('/api/status').then(r=>{if(!r.ok)throw Error();return r.json();}).then(data=>{

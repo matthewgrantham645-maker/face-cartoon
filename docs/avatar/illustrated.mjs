@@ -29,10 +29,10 @@ async function load(source,name){
     const next=await loadMeshAvatar(canvas,source,{manual:true});
     if(ticket!==serial){next.destroy();return;}
     const previous=avatar;avatar=next;previous?.destroy();
-    avatar.setAutoIdle(false);avatar.setAutoMotion(false);avatar.setSwayGain(.45);
+    avatar.setAutoIdle(false);avatar.setAutoMotion(false);avatar.setSwayGain(.25);
     state.ready=true;state.name=name||next.package.manifest.name;applyLighting();
     $('renderMode').value='illustration';select();
-    message('二维插画已就绪 · 支持轻侧脸、眨眼、嘴型与视线。大角度侧脸需要额外视图。');
+    message('二维插画已就绪 · 侧脸形变保护已开启，可在下方调整幅度；大角度输入会柔和限幅。');
   }catch(error){
     if(ticket!==serial)return;
     message('二维角色加载失败：'+error.message+(avatar?'，继续保留当前角色。':'。已切到参数角色，可继续使用面捕。'));
@@ -46,7 +46,7 @@ state.update=(pose,now)=>{
   if(lastDraw&&elapsed<1000/state.frameRate-1)return;
   lastDraw=now;
   const start=performance.now();
-  avatar.setParameters(window.AvatarMeshBridge.mapPose(pose,Number($('bodyFollow').value)));
+  avatar.setParameters(window.AvatarMeshBridge.mapPose(pose,Number($('bodyFollow').value),Number($('turnStrength').value)));
   const step=Math.min(.05,Math.max(.008,elapsed/1000));
   // advance() draws once per simulation step. Use exactly one draw here.
   avatar.advance(step,1/step);

@@ -4,8 +4,8 @@ const {mapPose}=require('../docs/avatar/mesh-bridge.js');
 const neutral=mapPose();assert.equal(neutral.eyeROpen,1);assert.equal(neutral.eyeLOpen,1);assert.equal(neutral.angleX,0);
 const wink=mapPose({eyeL:0,eyeR:1});assert.equal(wink.eyeROpen,0);assert.equal(wink.eyeLOpen,1);
 const bad=mapPose({yaw:99,pitch:Infinity,roll:NaN,eyeL:-9,mouth:8,pucker:1,smile:-1});
-assert(Object.values(bad).every(Number.isFinite));assert.equal(bad.angleX,30);assert(bad.angleY===0);assert.equal(bad.eyeROpen,0);assert.equal(bad.mouthOpen,1);assert.equal(bad.mouthForm,1);assert.equal(bad.bodyAngleX,9);
-assert(mapPose({yaw:1,roll:1},0).bodyAngleZ===0);assert.equal(mapPose({yaw:1},.5).bodyAngleX,10);
+assert(Object.values(bad).every(Number.isFinite));assert(bad.angleX>10&&bad.angleX<12);assert(bad.angleY===0);assert.equal(bad.eyeROpen,0);assert.equal(bad.mouthOpen,1);assert.equal(bad.mouthForm,1);assert(bad.bodyAngleX<3.6);
+assert(mapPose({yaw:1,roll:1},0).bodyAngleZ===0);assert(mapPose({yaw:1},.5).bodyAngleX<6);
 assert(mapPose({pucker:1}).mouthForm>mapPose({smile:1}).mouthForm,'round and wide mouth shapes must have distinct targets');
 (async()=>{
  const root=path.join(__dirname,'../docs/avatar/character');
