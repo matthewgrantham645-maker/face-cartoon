@@ -41,7 +41,7 @@ async function setSlider(page,id,value){await page.locator('#'+id).evaluate((el,
    const c=document.createElement('canvas');c.width=640;c.height=480;const g=c.getContext('2d');let t=0;const timer=setInterval(()=>{g.fillStyle=t++%2?'#bbbbbb':'#cccccc';g.fillRect(0,0,640,480);},33);
    navigator.mediaDevices.getUserMedia=async()=>c.captureStream(30);window.addEventListener('pagehide',()=>clearInterval(timer));
   });
-  await page.click('#camera');await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('校准完成'),{timeout:20000});
+  await page.selectOption('#trackingProfile','calibrated');await page.click('#camera');await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('校准完成'),{timeout:20000});
   await page.evaluate(()=>testFace.set(0,.07));await sleep(500);assert(Number(await page.locator('#eyeL').inputValue())<.05);assert(Number(await page.locator('#mouth').inputValue())>.6);await page.click('#stop');assert(await page.locator('#capture').isDisabled());
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'mobile.png'),fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
   assert.deepEqual(errors,[]);

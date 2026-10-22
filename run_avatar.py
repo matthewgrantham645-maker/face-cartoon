@@ -6,6 +6,7 @@ import json
 import math
 import os
 import re
+import threading
 import urllib.error
 import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -14,8 +15,33 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 4 * 1024 * 1024
+CORE_URL = "https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"
+CORE_CACHE = None
+CORE_LOCK = threading.Lock()
 NUMBERS = {"hairVolume": (.8, 1.4), "faceWidth": (.82, 1.2), "jawWidth": (.75, 1.18),
            "faceLength": (.86, 1.15), "eyeSize": (.7, 1.4), "eyeSpacing": (.85, 1.2), "browThickness": (.7, 1.5)}
+
+
+def load_live2d_core():
+    """Fetch only the official public Core asset; cache in this process, not git.
+
+    urllib respects HTTPS_PROXY / system proxy settings. No camera images or
+    credentials are included, and callers cannot supply an arbitrary URL.
+    """
+    global CORE_CACHE
+    with CORE_LOCK:
+        if CORE_CACHE is not None:
+            return CORE_CACHE
+        request = urllib.request.Request(CORE_URL, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/javascript,*/*;q=0.8"})
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:
+                data = response.read(1024 * 1024 + 1)
+            if not 10000 < len(data) <= 1024 * 1024 or b"Live2DCubismCore" not in data[:4096] or data.lstrip().startswith(b"<"):
+                raise ValueError("unexpected Core response")
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+            raise RuntimeError("无法从 Live2D 官方站取得 Core。请检查系统代理，或使用本地 SDK 的 Core 文件。") from None
+        CORE_CACHE = data
+        return data
 
 
 def sanitize_appearance(data):
@@ -123,6 +149,20 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if urlparse(self.path).path == "/api/status":
             self.reply(200, {"configured": bool(os.environ.get("DEEPSEEK_API_KEY", "").strip())})
+            return
+        if urlparse(self.path).path == "/api/live2d-core.js":
+            try:
+                body = load_live2d_core()
+            except RuntimeError as error:
+                self.reply(502, {"error": str(error)})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/javascript; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "private, max-age=3600")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(body)
             return
         if self.path in ("/", "/index.html"):
             self.send_response(302)

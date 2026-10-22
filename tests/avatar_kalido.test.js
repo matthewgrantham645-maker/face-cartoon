@@ -1,0 +1,17 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {fromKalido,live2dParameters}=require('../docs/avatar/kalido-driver.js');
+const mesh=require('../docs/avatar/mesh-bridge.js');
+const r={head:{x:.1,y:.2,z:.3,degrees:{x:6,y:12,z:18}},eye:{l:.9,r:.1},mouth:{x:.25,y:.7,shape:{O:.2,U:.1}},pupil:{x:.8,y:-.6},brow:.4};
+const p=fromKalido(r),q=live2dParameters(p);
+assert.equal(q.ParamAngleX,12);assert.equal(q.ParamAngleY,6);assert.equal(q.ParamAngleZ,18);
+assert.equal(q.ParamEyeLOpen,.9);assert.equal(q.ParamEyeROpen,.1);
+assert.equal(q.ParamMouthOpenY,.7);assert.equal(q.ParamMouthForm,.55);assert.equal(q.ParamEyeBallX,.8);
+assert(Math.abs(q.ParamBodyAngleX-3.6)<1e-8);
+assert.equal(mesh.mapPose(p).angleX,q.ParamAngleX);assert.equal(mesh.mapPose(p).angleY,q.ParamAngleY);assert.equal(mesh.mapPose(p).angleZ,-q.ParamAngleZ,'mesh and Cubism roll have opposite parameter signs for the same visual direction');
+assert.equal(mesh.mapPose(p).bodyAngleX,q.ParamBodyAngleX);
+assert.equal(live2dParameters(p,0).ParamBodyAngleX,0);
+const radians=fromKalido({head:{x:Math.PI/6,y:-Math.PI/6,z:Math.PI/12}});assert(Math.abs(radians.yaw+1)<1e-12);assert(Math.abs(radians.roll+.5)<1e-12);
+let called=0;const blink=fromKalido(r,(e,y)=>{called++;assert.equal(y,.2);return{l:0,r:1};});assert.equal(called,1);assert.equal(blink.eyeR,0);assert.equal(blink.eyeL,1);assert.deepEqual(r.eye,{l:.9,r:.1});
+const bad=fromKalido({head:{degrees:{x:Infinity,y:999}},eye:{l:-4,r:NaN},mouth:{x:9,y:Infinity}});assert(Object.values(bad).every(Number.isFinite));assert.equal(bad.yaw,1);assert.equal(bad.eyeL,1);assert.equal(bad.eyeR,0);
+console.log('PASS: official degrees/radians, blink stabilization without mutation, anatomical eye conversion, shared head/body axes, gaze and mouth mappings, bounded malformed input.');

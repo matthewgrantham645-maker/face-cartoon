@@ -15,6 +15,21 @@ import run_avatar as app
 
 
 class AvatarServerTests(unittest.TestCase):
+    def test_core_is_fixed_source_bounded_and_memory_cached(self):
+        core = b"/* Live2DCubismCore test fixture */" + b" " * 10000
+        with patch.object(app, "CORE_CACHE", None), patch.object(app.urllib.request, "urlopen", return_value=io.BytesIO(core)) as upstream:
+            self.assertEqual(app.load_live2d_core(), core)
+            self.assertEqual(app.load_live2d_core(), core)
+            self.assertEqual(upstream.call_count, 1)
+            request = upstream.call_args.args[0]
+            self.assertEqual(request.full_url, app.CORE_URL)
+            self.assertIsNone(request.get_header("Authorization"))
+            self.assertIsNone(request.data)
+        for bad in (b"<html>" + core, b"missing marker" * 1000, core + b" " * (1024 * 1024)):
+            with patch.object(app, "CORE_CACHE", None), patch.object(app.urllib.request, "urlopen", return_value=io.BytesIO(bad)):
+                with self.assertRaises(RuntimeError):
+                    app.load_live2d_core()
+
     def test_parameters_are_bounded_and_never_executable(self):
         value = app.sanitize_appearance({"hairColor": "<script>", "hairVolume": 999, "glasses": "false", "eyeSize": float("nan"), "hairStyle": "wavy", "payload": "evil"})
         self.assertEqual(value, {"hairVolume": 1.4, "hairStyle": "wavy"})
@@ -51,6 +66,20 @@ class AvatarServerTests(unittest.TestCase):
                 with urllib.request.urlopen(url + "/avatar/illustrated.mjs") as response:
                     self.assertEqual(response.headers.get_content_type(), "text/javascript")
                     self.assertIn("loadMeshAvatar", response.read().decode())
+                with patch.object(app, "load_live2d_core", return_value=b"/* official Core fixture */") as loader:
+                    with urllib.request.urlopen(url + "/api/live2d-core.js") as response:
+                        self.assertEqual(response.headers.get_content_type(), "text/javascript")
+                        self.assertEqual(response.read(), b"/* official Core fixture */")
+                    self.assertEqual(loader.call_count, 1)
+                    blocked = urllib.request.Request(url + "/api/live2d-core.js", headers={"Origin": "https://unrelated.example"})
+                    with self.assertRaises(urllib.error.HTTPError) as error:
+                        urllib.request.urlopen(blocked)
+                    self.assertEqual(error.exception.code, 403)
+                    self.assertEqual(loader.call_count, 1)
+                with patch.object(app, "load_live2d_core", side_effect=RuntimeError("Core offline")):
+                    with self.assertRaises(urllib.error.HTTPError) as error:
+                        urllib.request.urlopen(url + "/api/live2d-core.js")
+                    self.assertEqual(error.exception.code, 502)
                 jpeg = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff" + b"0" * 20).decode()
                 request = urllib.request.Request(url + "/api/appearance", data=json.dumps({"image": jpeg}).encode(), headers={"Content-Type": "application/json"})
                 with self.assertRaises(urllib.error.HTTPError) as error:

@@ -10,7 +10,7 @@ const elements={};
 const context2d={drawImage(){},getImageData(){return{data:pixels};}};
 function element(){return{value:'1',checked:false,disabled:false,textContent:'',style:{},classList:{toggle(){}},handlers:{},addEventListener(name,fn){this.handlers[name]=fn;},getContext(){return context2d;},toDataURL(){return'data:image/jpeg;base64,AA==';}};}
 for(const [,id]of html.matchAll(/id="([^"]+)"/g))elements[id]=element();
-elements.avatar.width=600;elements.avatar.height=680;elements.captureRate.value='30';
+elements.avatar.width=600;elements.avatar.height=680;elements.captureRate.value='30';elements.trackingProfile.value='calibrated';elements.bodyFollow.value='.3';
 Object.assign(elements.video,{videoWidth:640,videoHeight:480,readyState:4,currentTime:0,play:async()=>{}});
 const saved=new Map();
 function points(){
@@ -31,7 +31,7 @@ const sandbox={console,setTimeout,clearTimeout,Blob,URL,AbortSignal,performance:
  fetch:async(url,options)=>{if(url==='/api/status')return{ok:true,json:async()=>({configured:true})};assert.equal(url,'/api/appearance');apiCalls++;assert(JSON.parse(options.body).image.startsWith('data:image/jpeg'));return{ok:true,json:async()=>({appearance:{hairStyle:'short',hairColor:'#111122',faceWidth:9,noseLength:9}})};}
 };
 sandbox.window=sandbox;vm.createContext(sandbox);
-for(const file of ['model.js','tracking.js'])vm.runInContext(fs.readFileSync(path.join(dir,file),'utf8'),sandbox);
+for(const file of ['model.js','tracking.js','kalido-driver.js','mesh-bridge.js'])vm.runInContext(fs.readFileSync(path.join(dir,file),'utf8'),sandbox);
 sandbox.FlatAvatar.render=(_ctx,_a,p)=>{draws++;rendered={...p};};
 vm.runInContext(fs.readFileSync(path.join(dir,'app.js'),'utf8'),sandbox);
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
@@ -47,6 +47,11 @@ async function frames(count){for(let i=0;i<count;i++){now+=50;elements.video.cur
  await frames(30);assert.match(elements.status.textContent,/校准完成/);
  elements.useAI.checked=true;await elements.capture.onclick();assert.equal(apiCalls,1);
  const appearance=JSON.parse(saved.get('flat-avatar-v2'));assert.equal(appearance.hairStyle,'short');assert.equal(appearance.hairColor,'#111122');assert(appearance.faceWidth<=1.2);assert(appearance.noseLength<=1.2);
+ elements.trackingProfile.value='official';elements.trackingProfile.handlers.change();
+ assert.equal(elements.calibrate.disabled,true);assert.equal(elements.eyeGain.disabled,true);
+ sandbox.Kalidokit.Face.solve=()=>({head:{x:0,y:.2,z:0,degrees:{x:0,y:12,z:0}},eye:{l:1,r:0},pupil:{x:.5,y:0},mouth:{x:.2,y:.7,shape:{O:.3}}});
+ await frames(8);assert(rendered.eyeL<.01);assert(rendered.eyeR>.99);assert(rendered.mouth>.69);assert(Math.abs(rendered.yaw-.4)<.01);
+ const d=sandbox.AvatarDiagnostics.snapshot();assert.equal(d.profile,'official');assert(d.inputCount>60);assert.equal(d.calibrating,false);assert(Math.abs(d.mesh.bodyAngleX-3.6)<.05);
  elements.stop.onclick();assert.equal(stopped,1);assert.equal(elements.capture.disabled,true);
  const before=apiCalls;elements.demo.onclick();await frames(10);assert(draws>70);assert.equal(apiCalls,before);
  console.log('PASS: camera calibration, live expressions, local photo generation, optional API geometry protection, stopping, and demo without API calls.');

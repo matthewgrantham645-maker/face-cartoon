@@ -1,2 +1,7 @@
 node_modules
 dist
+
+# User-provided proprietary SDK dependency; never commit credentials or Core.
+docs/avatar/vendor/live2dcubismcore.min.js
+__pycache__/
+.env

@@ -58,7 +58,9 @@
       const next=A.pose({eyeL,eyeR,mouth,
         smile:clamp(deadzone((r.corner-b.corner)*5+widthChange*.8,.025),-.7,1),
         pucker:mouth>.06?clamp(-widthChange*3+(solved.mouth?.shape?.O||0)*.6):0,
-        yaw:-(r.yaw-b.yaw)*2*g.motionGain,pitch:(r.pitch-b.pitch)*2.1*g.motionGain,roll:-(r.roll-b.roll)*2.9*g.motionGain,
+        // Same angle convention as the official mapping; subtract only the
+        // calibrated neutral pose, then apply the user's amplitude setting.
+        yaw:(r.yaw-b.yaw)*180/Math.PI/30*g.motionGain,pitch:-(r.pitch-b.pitch)*180/Math.PI/30*g.motionGain,roll:-(r.roll-b.roll)*180/Math.PI/30*g.motionGain,
         gazeX:eyeL>.35&&eyeR>.35?deadzone((r.gazeX-b.gazeX)*.65,.06):this.last.gazeX,
         gazeY:eyeL>.35&&eyeR>.35?deadzone((r.gazeY-b.gazeY)*.65,.06):this.last.gazeY,
         browL:deadzone((r.browL-b.browL)*12,.025),browR:deadzone((r.browR-b.browR)*12,.025)});

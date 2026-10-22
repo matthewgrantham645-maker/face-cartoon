@@ -46,7 +46,7 @@ state.update=(pose,now)=>{
   if(lastDraw&&elapsed<1000/state.frameRate-1)return;
   lastDraw=now;
   const start=performance.now();
-  avatar.setParameters(window.AvatarMeshBridge.mapPose(pose));
+  avatar.setParameters(window.AvatarMeshBridge.mapPose(pose,Number($('bodyFollow').value)));
   const step=Math.min(.05,Math.max(.008,elapsed/1000));
   // advance() draws once per simulation step. Use exactly one draw here.
   avatar.advance(step,1/step);

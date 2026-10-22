@@ -17,6 +17,10 @@ result=d.update(fixture(.4),solved,size,now+=33);assert.equal(result.pose.eyeL,0
 for(let i=0;i<5;i++)result=d.update(fixture(1,.07),solved,size,now+=33);
 assert(result.pose.eyeL>.8);assert(result.pose.mouth>.6);assert(Object.values(result.pose).every(Number.isFinite));
 const moved=d.update(fixture(),{...solved,head:{x:0,y:4,z:0}},size,now+=33);assert(Math.abs(moved.pose.yaw)<.5,'a single extreme rotation must be bounded');
+const canonical=new MotionDriver();let stamp=0,turned;
+for(let i=0;i<30;i++)canonical.update(fixture(),solved,size,stamp+=40);
+for(let i=0;i<8;i++)turned=canonical.update(fixture(),{...solved,head:{x:.1,y:.2,z:.1}},size,stamp+=40);
+assert(turned.pose.yaw>0&&turned.pose.pitch<0&&turned.pose.roll<0,'personal calibration must preserve the official canonical angle directions');
 const adaptive=new OneEuro(1.6,.8),fixed=new OneEuro(1.6,0);adaptive.update(0,0);fixed.update(0,0);
 let av,fv;for(let i=1;i<=4;i++){av=adaptive.update(1,i*33);fv=fixed.update(1,i*33);}assert(av>fv+.08,'adaptive filtering must respond faster to deliberate movement');
 const quiet=new OneEuro(1.6,.3);let input=[],output=[];for(let i=0;i<120;i++){const v=(i%2?1:-1)*.03;input.push(v);output.push(quiet.update(v,i*33));}const rms=xs=>Math.sqrt(xs.slice(20).reduce((s,x)=>s+x*x,0)/(xs.length-20));assert(rms(output)<rms(input)*.5,'stationary jitter must be reduced');
