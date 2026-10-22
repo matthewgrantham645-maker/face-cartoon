@@ -50,7 +50,8 @@
     try{await loadPromise;}catch(error){tracker=null;throw error;}finally{loadPromise=null;}
   }
   async function send(image,kind){purpose=kind;frameResult=null;const start=performance.now();await tracker.send({image});if(kind==='live')inferenceMS=inferenceMS?inferenceMS*.85+(performance.now()-start)*.15:performance.now()-start;return frameResult?frameResult.map(p=>({...p})):null;}
-  function updateEngine(){ $('engine').textContent=mode==='camera'&&stream?'MediaPipe + KalidoKit':mode==='demo'?'曲线变形 · 自动演示':'曲线变形 · 手动'; }
+  function updateEngine(){ const art=window.IllustratedAvatar?.active?'二维插画网格':'参数曲线';$('engine').textContent=mode==='camera'&&stream?art+' · 面捕':art+(mode==='demo'?' · 自动演示':' · 手动'); }
+  window.addEventListener('avatar-renderer-change',updateEngine);
   async function startCamera(){
     if(starting||generating)return;if(stream){setMode('camera');calibrate();updateEngine();return;}
     starting=true;$('camera').disabled=true;const token=++epoch;say('正在加载面捕组件并请求摄像头…');
@@ -84,7 +85,7 @@
           candidate=A.sanitize({...candidate,...result.appearance,faceWidth:candidate.faceWidth,jawWidth:candidate.jawWidth,eyeSpacing:candidate.eyeSpacing,eyeTilt:candidate.eyeTilt,noseLength:candidate.noseLength,mouthWidth:candidate.mouthWidth});ai=true;
         }catch(error){warning=' DeepSeek 分析未成功，本次使用本地比例生成。';$('apiStatus').textContent=warning+' '+error.message;console.warn(error.message);}
       }
-      appearance=candidate;syncLook();remember();$('snapshot').src=dataURL;$('snapshot').style.display='block';
+      appearance=candidate;syncLook();remember();window.IllustratedAvatar?.useParameters();$('snapshot').src=dataURL;$('snapshot').style.display='block';
       $('origin').textContent=ai?'当前：照片测量比例 + DeepSeek 外观分析生成。':'当前：照片测量比例与近似肤色生成；发型和眼镜沿用设置，可手动调整。';
       say('角色已生成。'+(ai?'可以继续面捕或微调形象。':'本地模式尚不自动识别发型和眼镜，可展开“微调形象”。')+warning);
       if(mode==='camera')calibrate();
@@ -105,7 +106,8 @@
       if(mode==='camera'&&!calibrating&&now-lastFace<700&&now-lastReport>2000){say('面捕驱动中 · '+Math.round(frameCount*1000/(now-lastReport))+' 次/秒 · 处理约 '+Math.round(inferenceMS)+' ms/帧');frameCount=0;lastReport=now;}
     }
     for(const key in shown){const tau=mode==='camera'?(key.startsWith('eye')?8:key==='mouth'?16:22):(key.startsWith('eye')?16:key==='mouth'?35:70);shown[key]+=(target[key]-shown[key])*(1-Math.exp(-dt/tau));}
-    A.render(ctx,appearance,shown,canvas.width,canvas.height);
+    if(window.IllustratedAvatar?.active)window.IllustratedAvatar.update(shown,now);
+    else A.render(ctx,appearance,shown,canvas.width,canvas.height);
     if(now-lastUI>100){if(mode!=='manual')syncPose();else for(const name of poseFields)$(name+'Value').textContent=shown[name].toFixed(2);lastUI=now;}
     requestAnimationFrame(tick);
   }
@@ -118,7 +120,7 @@
   $('upload').onchange=async event=>{const file=event.target.files[0];if(!file)return;if(file.size>12*1024*1024){say('请上传小于 12 MB 的照片。');event.target.value='';return;}const url=URL.createObjectURL(file);try{const img=new Image();img.src=url;await img.decode();await generateFrom(img);}catch(error){say('无法读取照片：'+error.message);}finally{URL.revokeObjectURL(url);event.target.value='';}};
   $('defaultLook').onclick=()=>{appearance=A.sanitize();syncLook();remember();$('origin').textContent='当前：默认角色，尚未从照片生成。';};
   function download(href,name){const a=document.createElement('a');a.href=href;a.download=name;a.click();}
-  $('savePNG').onclick=()=>download(canvas.toDataURL('image/png'),'my-flat-avatar.png');
+  $('savePNG').onclick=()=>download((window.IllustratedAvatar?.active?window.IllustratedAvatar.canvas:canvas).toDataURL('image/png'),'my-flat-avatar.png');
   $('saveConfig').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:3,appearance},null,2)],{type:'application/json'}));download(url,'my-avatar.json');setTimeout(()=>URL.revokeObjectURL(url),1000);};
   window.addEventListener('pagehide',stop);
   fetch('/api/status').then(r=>{if(!r.ok)throw Error();return r.json();}).then(data=>{

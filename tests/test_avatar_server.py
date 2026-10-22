@@ -48,6 +48,9 @@ class AvatarServerTests(unittest.TestCase):
                     self.assertEqual(json.load(response), {"configured": False})
                 with urllib.request.urlopen(url + "/avatar/") as response:
                     self.assertIn("vendor/kalidokit.umd.js", response.read().decode())
+                with urllib.request.urlopen(url + "/avatar/illustrated.mjs") as response:
+                    self.assertEqual(response.headers.get_content_type(), "text/javascript")
+                    self.assertIn("loadMeshAvatar", response.read().decode())
                 jpeg = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff" + b"0" * 20).decode()
                 request = urllib.request.Request(url + "/api/appearance", data=json.dumps({"image": jpeg}).encode(), headers={"Content-Type": "application/json"})
                 with self.assertRaises(urllib.error.HTTPError) as error:

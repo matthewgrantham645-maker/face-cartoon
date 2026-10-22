@@ -93,6 +93,10 @@ def analyze_appearance(image):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    # Windows registry MIME overrides must not turn ESM modules into plain text.
+    extensions_map = {**SimpleHTTPRequestHandler.extensions_map,
+                      ".js": "text/javascript", ".mjs": "text/javascript"}
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT / "docs"), **kwargs)
 
