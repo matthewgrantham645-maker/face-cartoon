@@ -1,0 +1,242 @@
+:root {
+  --fog: #e4eee9;
+  --ink: #16324f;
+  --paper: #f7fbfa;
+  --line: #b7c7c3;
+  --box: #f5b700;
+  --muted: #5d7380;
+  --warn: #9a3412;
+  --display: "ZCOOL XiaoWei", "Songti SC", serif;
+  --body: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  --mono: "IBM Plex Mono", "Cascadia Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--fog);
+  color: var(--ink);
+  font-family: var(--body);
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  padding: 22px 28px 8px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(40px, 5vw, 64px);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.status {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+  text-align: right;
+}
+
+.stages {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 18px;
+  padding: 12px 28px 8px;
+  min-height: 0;
+}
+
+.stage {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stage-label {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.view {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+#camera {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #d5e2dc;
+}
+
+.cartoon-view { padding: 18px; }
+
+.square {
+  position: relative;
+  height: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
+  max-width: 100%;
+}
+
+#cartoon {
+  width: 100%;
+  height: 100%;
+  background: #d5e2dc;
+}
+
+.empty {
+  position: absolute;
+  inset: auto 20px 20px 20px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  pointer-events: none;
+}
+
+.card {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: min(48%, 260px);
+  padding: 10px;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.card::before,
+.card::after,
+.square::before,
+.square::after,
+.tick {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--box);
+  pointer-events: none;
+}
+
+.square::before,
+.square::after { content: ""; }
+.square::before { top: 8px; left: 8px; border-right: 0; border-bottom: 0; }
+.square::after { top: 8px; right: 8px; border-left: 0; border-bottom: 0; }
+.tick.bl { bottom: 8px; left: 8px; border-right: 0; border-top: 0; }
+.tick.br { bottom: 8px; right: 8px; border-left: 0; border-top: 0; }
+.card::before { top: -3px; left: -3px; border-right: 0; border-bottom: 0; }
+.card::after { right: -3px; bottom: -3px; border-left: 0; border-top: 0; }
+
+.card-label {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+#portrait {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: #d5e2dc;
+}
+
+.thumb {
+  position: absolute;
+  top: 34px;
+  right: 16px;
+  width: 72px;
+  margin: 0;
+}
+
+#thumb {
+  display: block;
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border: 2px solid var(--ink);
+  background: white;
+}
+
+.thumb figcaption {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.2;
+  background: var(--paper);
+}
+
+.bar {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 14px 28px 22px;
+}
+
+#freeze,
+#retry {
+  appearance: none;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--body);
+  font-size: 16px;
+  font-weight: 700;
+  padding: 12px 28px;
+  cursor: pointer;
+}
+
+#freeze:disabled {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--line);
+  cursor: wait;
+}
+
+#freeze:focus-visible,
+#retry:focus-visible {
+  outline: 3px solid var(--box);
+  outline-offset: 3px;
+}
+
+.note {
+  min-height: 1.2em;
+  margin: 0;
+  color: var(--warn);
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .top { flex-direction: column; align-items: flex-start; }
+  .status { text-align: left; }
+  .stages { grid-template-columns: 1fr; }
+  .view { min-height: 280px; }
+  .card { width: min(62%, 240px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto; }
+}

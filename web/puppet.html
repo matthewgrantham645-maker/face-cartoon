@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>人跟着动</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    .note { color: var(--muted); }
+    .stages { align-items: start; }
+    .view { flex: none; width: 100%; aspect-ratio: 1; min-height: 0; }
+    #camera, #stage { width: 100%; height: 100%; object-fit: contain; background: #d5e2dc; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="eyebrow">定稿一张 · 背景不动</p>
+      <h1>人跟着动</h1>
+    </div>
+    <p class="status" id="status" role="status">正在准备</p>
+  </header>
+  <main class="stages">
+    <section class="stage" aria-label="摄像头">
+      <p class="stage-label">摄像头</p>
+      <div class="view"><canvas id="camera"></canvas></div>
+    </section>
+    <section class="stage" aria-label="蜡笔涂鸦">
+      <p class="stage-label">蜡笔涂鸦</p>
+      <div class="view"><canvas id="stage" width="1024" height="1024"></canvas></div>
+    </section>
+  </main>
+  <footer class="bar">
+    <p class="note" id="note">爱心和贴纸留在原地。头、肩膀跟着你，眨眼和张嘴只动五官。</p>
+  </footer>
+  <video id="video" playsinline autoplay muted hidden></video>
+  <script type="module" src="/static/puppet.js?v=1"></script>
+</body>
+</html>

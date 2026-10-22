@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>方框里的脸</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="eyebrow">摄像头 · 方框 · 这一帧</p>
+      <h1>方框里的脸</h1>
+    </div>
+    <p class="status" id="status" role="status">正在打开摄像头</p>
+  </header>
+
+  <main class="stages">
+    <section class="stage" aria-label="摄像头">
+      <p class="stage-label">摄像头</p>
+      <div class="view">
+        <canvas id="camera"></canvas>
+        <p class="empty" id="camera-empty">允许使用摄像头后，把脸放进方框。</p>
+      </div>
+    </section>
+
+    <section class="stage" aria-label="跟拍卡通">
+      <p class="stage-label">跟拍卡通</p>
+      <div class="view cartoon-view">
+        <div class="square" id="square">
+          <span class="tick bl"></span>
+          <span class="tick br"></span>
+          <canvas id="cartoon" width="640" height="640"></canvas>
+          <p class="empty" id="cartoon-empty">右边只画方框里的这一帧</p>
+          <article class="card" id="card" hidden>
+            <p class="card-label">定妆照 · 皮克斯</p>
+            <img id="portrait" alt="皮克斯定妆照">
+            <figure class="thumb">
+              <img id="thumb" alt="这次截到的脸">
+              <figcaption>这次截到的脸</figcaption>
+            </figure>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="bar">
+    <button type="button" id="freeze" disabled>定格，生成皮克斯定妆照</button>
+    <button type="button" id="retry" hidden>再试一次摄像头</button>
+    <p class="note" id="note"></p>
+  </footer>
+
+  <video id="video" playsinline autoplay muted hidden></video>
+  <script src="/static/app.js"></script>
+</body>
+</html>

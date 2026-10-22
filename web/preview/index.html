@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>风格对比</title>
+  <style>
+    body { margin: 0; background: #f3f1ea; color: #1c2430; font-family: "Microsoft YaHei", sans-serif; }
+    h1 { font-size: 22px; font-weight: 650; margin: 20px 24px 8px; }
+    p { margin: 0 24px 18px; color: #526070; }
+    .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 0 24px 28px; }
+    figure { margin: 0; }
+    img { width: 100%; display: block; background: #ddd; }
+    figcaption { margin-top: 8px; font-size: 13px; line-height: 1.4; }
+    @media (max-width: 900px) { .row { grid-template-columns: 1fr 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>同一张脸，换画法</h1>
+  <p>前四张还是同一类滤镜。最后一张是另做的平涂，用来看“更抽象”长什么样。这里没有迪士尼角色。</p>
+  <div class="row">
+    <figure>
+      <img src="00_original.jpg" alt="原图">
+      <figcaption>原图</figcaption>
+    </figure>
+    <figure>
+      <img src="02_v2_256.jpg" alt="当前跟拍">
+      <figcaption>当前跟拍。256 像素，脸会被拧。</figcaption>
+    </figure>
+    <figure>
+      <img src="01_v2_512.jpg" alt="同一模型 512">
+      <figcaption>同一权重，改回 512。扭曲少了，仍是画过的人脸。</figcaption>
+    </figure>
+    <figure>
+      <img src="face_paint_512_v1.jpg" alt="人脸卡通第一版">
+      <figcaption>人脸卡通第一版。涂得更开，还是一张脸，不是角色。</figcaption>
+    </figure>
+    <figure>
+      <img src="paprika.jpg" alt="Paprika">
+      <figcaption>Paprika。另一套权重，基本还是照片，只是偏黄。</figcaption>
+    </figure>
+    <figure>
+      <img src="flat_ink.jpg" alt="平涂勾边">
+      <figcaption>平涂勾边。更抽象，还不是角色。</figcaption>
+    </figure>
+  </div>
+</body>
+</html>

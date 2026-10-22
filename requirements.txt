@@ -1,0 +1,6 @@
+torch
+fastapi
+uvicorn
+websockets
+pillow
+onnxruntime-gpu[cuda,cudnn]
