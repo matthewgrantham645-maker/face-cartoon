@@ -8,7 +8,7 @@
 </head>
 <body>
 <main>
-  <header><a class="brand" href="/home/">AI-FacialLab<span>照片生图</span></a><nav><a href="/home/">主页</a><a href="/avatar/">实时面捕</a><span class="badge">第七版</span></nav></header>
+  <header><a class="brand" href="/home/">AI-FacialLab<span>照片生图</span></a><nav><a href="/home/">主页</a><a href="/avatar/">实时面捕</a><span class="badge">第八版</span></nav></header>
   <div class="intro"><div><p class="eyebrow">把你画进不同的世界</p><h1>一张照片，多种画风。</h1><p>上传已有照片，或用摄像头拍一张。选好风格，再生成你的新形象。</p></div><span id="keyState" class="badge">正在检查生图服务</span></div>
   <div class="compare">
     <section class="card source-card">
@@ -25,7 +25,7 @@
       <p id="sourceLabel" class="small source-label">尚未选择照片</p>
     </section>
     <section class="card result-card">
-      <div class="section-head"><h2><span class="step">03</span>查看新形象</h2><button id="download" class="subtle" disabled>下载这张图 ↗</button></div>
+      <div class="section-head"><h2><span class="step">03</span>查看新形象</h2><button id="useForTracking" class="secondary" disabled>用于面捕 →</button><button id="download" class="subtle" disabled>下载这张图 ↗</button></div>
       <div class="result"><img id="result" alt="AI 生成的人物形象" hidden><div id="resultEmpty" class="placeholder"><span class="result-mark" aria-hidden="true">✦</span><strong>你的新形象会出现在这里</strong><span>同一张照片可以尝试不同风格</span></div><div id="generating" class="generating" hidden><span class="spinner"></span><strong>正在绘制你的形象</strong><span>请稍候，完成后会自动显示</span></div></div>
       <div class="result-footer"><span id="resultStyle" class="small">生成后可保存到本地</span><span id="resultSource" class="small"></span></div>
     </section>
@@ -41,8 +41,8 @@
     <section class="card"><details><summary>调整提示词与保存自定义风格</summary><label for="prompt" class="small">风格描述</label><textarea id="prompt" maxlength="4000" aria-label="风格提示词"></textarea><p class="small">生成时会补充人物特征保持要求；勾选立绘构图时会同时补充构图要求。</p><label for="styleName" class="small">自定义风格名称</label><input id="styleName" type="text" maxlength="24" autocomplete="off" placeholder="为这套画风起个名字"><div class="row"><button id="saveStyle" class="secondary">保存为新风格</button><button id="updateStyle" class="subtle" disabled>更新</button><button id="deleteStyle" class="subtle" disabled>删除</button></div></details><details><summary>生图服务配置</summary><p class="small">在启动 Python 服务的终端设置 DASHSCOPE_API_KEY 后重启服务。模型可通过 DASHSCOPE_IMAGE_MODEL 设置。</p><button id="refreshKey" class="subtle">重新检查配置</button></details></section>
     <section class="card"><div class="section-head"><h2>最近生成</h2><button id="clearHistory" class="subtle" disabled>清空记录</button></div><p class="small">最多保留最近 30 张，存储在此浏览器中。点击记录可恢复原照片与提示词。</p><div id="history" class="strip"></div><p id="historyEmpty" class="small">生成的形象会保存在这里。</p></section>
   </div>
-  <footer>当前页面生成静态图片。可动角色制作与实时面捕在后续步骤中进行；这里的风格名称描述绘画效果，不代表独立训练的模型。</footer>
+  <footer>生成后点击“用于面捕”，确认五官位置即可驱动这张形象。单张图片支持基础眨眼、口型与小幅转头；复杂画风可能需要校正绑定。</footer>
 </main>
-<script src="./library.js"></script><script src="./app.js"></script>
+<script src="../shared/portrait-store.js"></script><script src="./library.js"></script><script src="./app.js"></script>
 </body>
 </html>

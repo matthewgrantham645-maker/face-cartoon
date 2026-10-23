@@ -3,6 +3,7 @@
   var L = SelfieLibrary, $ = function (id) { return document.getElementById(id); };
   var stream = null, db = null, cameraReady = false, cameraStarting = false, cameraEpoch = 0;
   var sourceMode = "upload", frozen = "", sourceName = "", sourceKind = "upload";
+  var currentShot = null;
   var resultUrl = "", busy = false, loadingSource = false, uploadSerial = 0;
   var keyKnown = false, keyReady = false, userStyles = [], category = "全部", activeId = "";
   var selected = { kind: "preset", id: L.DEFAULT_STYLE };
@@ -21,6 +22,7 @@
     $("openCamera").disabled = blocked || cameraStarting || cameraReady || !!frozen;
     $("retake").disabled = blocked || !frozen;
     $("download").disabled = !resultUrl;
+    $("useForTracking").disabled = blocked || !currentShot;
     $("updateStyle").disabled = blocked || !selected || selected.kind !== "user";
     $("deleteStyle").disabled = $("updateStyle").disabled;
     $("clearHistory").disabled = blocked || !$("history").children.length;
@@ -50,13 +52,13 @@
     sync();
   }
   function showResult(shot) {
-    resultUrl = shot.result; $("result").src = resultUrl; $("result").hidden = false; $("resultEmpty").hidden = true;
+    currentShot = shot; resultUrl = shot.result; $("result").src = resultUrl; $("result").hidden = false; $("resultEmpty").hidden = true;
     $("resultStyle").textContent = shot.styleName || "自定义风格";
     $("resultSource").textContent = shot.sourceName || "历史照片";
     sync();
   }
   function clearResult() {
-    resultUrl = ""; activeId = ""; $("result").hidden = true; $("result").removeAttribute("src");
+    currentShot = null; resultUrl = ""; activeId = ""; $("result").hidden = true; $("result").removeAttribute("src");
     $("resultEmpty").hidden = false; $("resultStyle").textContent = "生成后可保存到本地"; $("resultSource").textContent = "";
   }
   async function openCamera() {
@@ -208,6 +210,12 @@
   $("generate").onclick=generate;$("refreshKey").onclick=loadKey;
   $("prompt").oninput=function(){/* Keep a selected custom style editable until Update is clicked. */if(selected&&selected.kind==="preset"&&currentStyle().prompt!==$("prompt").value)selected=null;renderStyles();};
   $("saveStyle").onclick=function(){changeStyle("save");};$("updateStyle").onclick=function(){changeStyle("update");};$("deleteStyle").onclick=function(){changeStyle("delete");};
+  $("useForTracking").onclick=async function(){
+    if(busy || loadingSource || !currentShot)return;
+    var shot=currentShot;$("useForTracking").disabled=true;
+    try{var previous=await PortraitStore.get(shot.id);await PortraitStore.put(Object.assign({},shot,{portraitBinding:previous&&previous.portraitBinding||shot.portraitBinding}));location.assign("/avatar/?portrait="+encodeURIComponent(shot.id));}
+    catch(error){status("无法传递浏览器记录。请下载图片，再在面捕页的‘导入二维角色’中选择这张图片。");sync();}
+  };
   $("download").onclick=function(){if(!resultUrl)return;var a=document.createElement("a");a.href=resultUrl;a.download="cartoon-"+Date.now()+(/image\/jpeg/.test(resultUrl)?".jpg":/image\/webp/.test(resultUrl)?".webp":".png");a.click();};
   $("clearHistory").onclick=async function(){if(busy||!db)return;try{var tx=db.transaction("shots","readwrite");tx.objectStore("shots").clear();await txDone(tx);activeId="";await refreshHistory();status("本浏览器中的生成记录已清空。");}catch(error){status("记录清理失败，请重试。");}};
   window.addEventListener("pagehide",function(){uploadSerial++;stopCamera();});

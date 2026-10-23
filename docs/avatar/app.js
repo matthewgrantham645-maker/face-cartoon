@@ -65,10 +65,18 @@
     try{await loadPromise;}catch(error){tracker=null;throw error;}finally{loadPromise=null;}
   }
   async function send(image,kind){purpose=kind;frameResult=null;const start=performance.now();await tracker.send({image});if(kind==='live')inferenceMS=inferenceMS?inferenceMS*.85+(performance.now()-start)*.15:performance.now()-start;return frameResult?frameResult.map(p=>({...p})):null;}
+  // Reuse the same detector, serializing still-image work with camera frames.
+  // No camera permission or external image-generation request is involved.
+  window.AvatarPortraitDetector={detect:async image=>{
+    if(generating||starting)throw Error('面捕组件正在准备，请稍后重试定位。');
+    generating=true;
+    try{await loadTracker();if(pendingFrame)await pendingFrame;return await send(image,'portrait');}
+    finally{purpose='live';generating=false;lastFace=performance.now();}
+  }};
   function updateEngine(){ const art=window.IllustratedAvatar?.active?'二维插画网格':'参数曲线';$('engine').textContent=mode==='camera'&&stream?art+' · 面捕':art+(mode==='demo'?' · 自动演示':' · 手动'); }
   window.addEventListener('avatar-renderer-change',updateEngine);
   async function startCamera(){
-    if(starting||generating)return;if(stream){setMode('camera');calibrate();updateEngine();return;}
+    if(starting)return;if(generating){say('正在定位图片或准备照片，请稍候再开启面捕。');return;}if(stream){setMode('camera');calibrate();updateEngine();return;}
     starting=true;$('camera').disabled=true;const token=++epoch;say('正在加载面捕组件并请求摄像头…');
     try{
       await loadTracker();if(token!==epoch)return;
@@ -160,3 +168,4 @@
   }).catch(()=>{$('apiStatus').textContent='当前是纯静态服务。运行 python run_avatar.py 后可配置 DeepSeek；本地生成和动画仍可用。';});
   syncLook();profileControls();requestAnimationFrame(tick);
 })();
+
