@@ -21,6 +21,11 @@ CORE_LOCK = threading.Lock()
 IMAGE_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
 IMAGE_MODELS = ("qwen-image-2.1-turbo", "qwen-image-3.0", "qwen-image-3.0-pro")
 MAX_PROMPT = 4000
+MAX_STYLE_NAME = 24
+MAX_STYLES = 80
+STYLES_PATH = ROOT / "data" / "selfie-styles.json"
+BUILTIN_STYLE_IDS = {"crayon-journal", "ghibli", "simpsons", "pixar", "disney", "dragon-ball", "shin-chan", "conan", "snoopy", "clay", "lego", "pixel", "low-poly", "y2k", "ins-minimal", "ukiyo-e", "southeast-asia", "oil-paint", "hand-drawn", "sketch", "watercolor"}
+STYLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
 MAX_RESULT = 8 * 1024 * 1024
 NUMBERS = {"hairVolume": (.8, 1.4), "faceWidth": (.82, 1.2), "jawWidth": (.75, 1.18),
            "faceLength": (.86, 1.15), "eyeSize": (.7, 1.4), "eyeSpacing": (.85, 1.2), "browThickness": (.7, 1.5)}
@@ -131,6 +136,63 @@ def validate_prompt(value):
     if len(text) > MAX_PROMPT:
         raise ValueError("提示词过长。")
     return text
+
+
+class StyleError(ValueError):
+    pass
+
+
+def normalize_styles(raw):
+    if not isinstance(raw, list):
+        raise StyleError("风格列表无效。")
+    if len(raw) > MAX_STYLES:
+        raise StyleError("风格太多。")
+    seen = set()
+    styles = []
+    for item in raw:
+        if not isinstance(item, dict):
+            raise StyleError("风格列表无效。")
+        style_id = item.get("id")
+        if isinstance(style_id, str) and style_id in BUILTIN_STYLE_IDS:
+            raise StyleError("内置风格不能修改。")
+        if not isinstance(style_id, str) or STYLE_ID.fullmatch(style_id) is None:
+            raise StyleError("风格编号无效。")
+        if style_id in seen:
+            raise StyleError("风格编号重复。")
+        seen.add(style_id)
+        name = item.get("name")
+        prompt = item.get("prompt")
+        if not isinstance(name, str) or not isinstance(prompt, str):
+            raise StyleError("风格列表无效。")
+        name = name.strip()
+        prompt = prompt.strip()
+        if not name or len(name) > MAX_STYLE_NAME:
+            raise StyleError("风格名称需要 1 到 24 个字。")
+        if not prompt or len(prompt) > MAX_PROMPT:
+            raise StyleError("提示词不能为空，且不超过 4000 字。")
+        styles.append({"id": style_id, "name": name, "prompt": prompt})
+    return styles
+
+
+def read_style_file(path):
+    path = Path(path)
+    if not path.is_file():
+        return [], True
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raise StyleError("风格记录读不出来。") from None
+    return normalize_styles(raw), False
+
+
+def write_style_file(path, raw):
+    styles = normalize_styles(raw)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(styles, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temporary, path)
+    return styles
 
 
 def image_model():
@@ -267,6 +329,9 @@ class Handler(SimpleHTTPRequestHandler):
             self.reply(200, {"configured": bool(os.environ.get("DEEPSEEK_API_KEY", "").strip()),
                              "selfie": bool(os.environ.get("DASHSCOPE_API_KEY", "").strip())})
             return
+        if urlparse(self.path).path == "/api/styles":
+            self.styles_get()
+            return
         if urlparse(self.path).path == "/api/live2d-core.js":
             try:
                 body = load_live2d_core()
@@ -293,7 +358,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.reply(403, {"error": "仅允许本机页面调用。"})
             return
         path = urlparse(self.path).path
-        if path not in ("/api/appearance", "/api/selfie"):
+        if path not in ("/api/appearance", "/api/selfie", "/api/styles"):
             self.reply(404, {"error": "接口不存在。"})
             return
         try:
@@ -308,12 +373,30 @@ class Handler(SimpleHTTPRequestHandler):
                 raise ValueError("请求体必须是 JSON 对象。")
             if path == "/api/appearance":
                 self.appearance(payload)
+            elif path == "/api/styles":
+                self.styles_post(payload)
             else:
                 self.selfie(payload)
+        except StyleError as error:
+            self.reply(400, {"error": str(error)})
         except (ValueError, UnicodeError):
             self.reply(400, {"error": "照片或请求格式无效。"})
         except RuntimeError as error:
             self.reply(502, {"error": str(error)})
+
+    def styles_get(self):
+        try:
+            styles, fresh = read_style_file(STYLES_PATH)
+        except StyleError as error:
+            self.reply(500, {"error": str(error)})
+            return
+        self.reply(200, {"styles": styles, "fresh": fresh})
+
+    def styles_post(self, payload):
+        if "styles" not in payload:
+            raise StyleError("风格列表无效。")
+        styles = write_style_file(STYLES_PATH, payload.get("styles"))
+        self.reply(200, {"styles": styles, "fresh": False})
 
     def appearance(self, payload):
         image = validate_image(payload.get("image"))

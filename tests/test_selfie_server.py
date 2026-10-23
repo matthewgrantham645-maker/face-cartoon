@@ -3,6 +3,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 import threading
 import unittest
 import urllib.error
@@ -121,7 +122,7 @@ class SelfieServerTests(unittest.TestCase):
                 with self.assertRaises(urllib.error.HTTPError) as error:
                     urllib.request.urlopen(request)
                 self.assertEqual(error.exception.code, 503)
-                self.assertIn("DASHSCOPE_API_KEY", error.exception.read().decode())
+                self.assertIn("尚未配置千问", error.exception.read().decode())
             empty = urllib.request.Request(base + "/api/selfie", data=json.dumps({"image": JPEG, "prompt": "  "}).encode(), headers={"Content-Type": "application/json"})
             with patch.dict(os.environ, {"DASHSCOPE_API_KEY": KEY}):
                 with self.assertRaises(urllib.error.HTTPError) as error:
@@ -131,6 +132,74 @@ class SelfieServerTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(2)
+
+    def test_style_file_roundtrip_rejects_builtin_and_keeps_previous(self):
+        self.assertEqual(app.STYLES_PATH.name, "selfie-styles.json")
+        self.assertEqual(app.STYLES_PATH.parent.name, "data")
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "selfie-styles.json"
+            self.assertEqual(app.read_style_file(path), ([], True))
+            saved = app.write_style_file(path, [{"id": "user-1", "name": " 夜市 ", "prompt": " 灯光 ", "extra": "不要留下"}])
+            self.assertEqual(saved, [{"id": "user-1", "name": "夜市", "prompt": "灯光"}])
+            self.assertEqual(app.read_style_file(path), (saved, False))
+            self.assertEqual(set(json.loads(path.read_text(encoding="utf-8"))[0]), {"id", "name", "prompt"})
+            too_many = [{"id": "n%d" % i, "name": "名", "prompt": "字"} for i in range(81)]
+            for bad in (
+                [{"id": "crayon-journal", "name": "冒充", "prompt": "不要覆盖"}],
+                [{"id": "ghibli", "name": "冒充", "prompt": "不要覆盖"}],
+                [{"id": "user-1", "name": "", "prompt": "有"}],
+                [{"id": "user-1", "name": "好", "prompt": ""}],
+                [{"id": "user-1", "name": "好", "prompt": "x" * 4001}],
+                [{"id": "user-1", "name": "名" * 25, "prompt": "有"}],
+                [{"id": "../x", "name": "好", "prompt": "有"}],
+                [{"id": "a", "name": "好", "prompt": "有"}, {"id": "a", "name": "又", "prompt": "有"}],
+                too_many,
+                {"styles": saved},
+            ):
+                with self.assertRaises(ValueError):
+                    app.write_style_file(path, bad)
+            self.assertEqual(app.read_style_file(path)[0], saved)
+            path.write_text("{", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                app.read_style_file(path)
+
+    def test_http_styles_roundtrip(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "selfie-styles.json"
+            with patch.object(app, "STYLES_PATH", path):
+                server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = "http://127.0.0.1:%s" % server.server_address[1]
+                try:
+                    with urllib.request.urlopen(base + "/api/styles") as response:
+                        fresh = json.loads(response.read().decode())
+                    self.assertEqual(fresh, {"styles": [], "fresh": True})
+                    stolen = urllib.request.Request(
+                        base + "/api/styles",
+                        data=json.dumps({"styles": [{"id": "crayon-journal", "name": "冒充", "prompt": "不要"}]}).encode(),
+                        headers={"Content-Type": "application/json"})
+                    with self.assertRaises(urllib.error.HTTPError) as error:
+                        urllib.request.urlopen(stolen)
+                    self.assertEqual(error.exception.code, 400)
+                    self.assertFalse(path.is_file())
+                    body = json.dumps({"styles": [{"id": "user-1", "name": "夜市", "prompt": "灯光"}]}).encode()
+                    request = urllib.request.Request(base + "/api/styles", data=body, headers={"Content-Type": "application/json"})
+                    with urllib.request.urlopen(request) as response:
+                        self.assertEqual(json.loads(response.read().decode())["styles"][0]["name"], "夜市")
+                    with urllib.request.urlopen(base + "/api/styles") as response:
+                        stored = json.loads(response.read().decode())
+                    self.assertEqual(stored["fresh"], False)
+                    self.assertEqual(stored["styles"][0]["prompt"], "灯光")
+                    empty = urllib.request.Request(base + "/api/styles", data=json.dumps({"styles": []}).encode(), headers={"Content-Type": "application/json"})
+                    with urllib.request.urlopen(empty) as response:
+                        self.assertEqual(json.loads(response.read().decode())["styles"], [])
+                    with urllib.request.urlopen(base + "/api/styles") as response:
+                        self.assertEqual(json.loads(response.read().decode()), {"styles": [], "fresh": False})
+                finally:
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(2)
 
 
 if __name__ == "__main__":

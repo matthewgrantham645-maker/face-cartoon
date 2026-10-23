@@ -19,6 +19,11 @@ const preset = L.PRESETS[0];
 assert.equal(preset.name, "蜡笔手账");
 assert.equal(preset.prompt.startsWith("把这张照片画成可爱、混乱的儿童蜡笔涂鸦。"), true);
 assert.equal(preset.prompt.endsWith("不要干净线稿。"), true);
+assert.equal(L.PRESETS.length, 21);
+assert.equal(new Set(L.PRESETS.map((item) => item.id)).size, 21);
+assert.equal(L.PRESETS.some((item) => item.name === "吉卜力" && item.prompt.startsWith("把这张照片画成吉卜力式手绘动画")), true);
+assert.equal(L.PRESETS[L.PRESETS.length - 1].name, "水彩风");
+assert.throws(() => L.addStyle([], "冒充", "有提示词", "ghibli"), /不能修改/);
 
 const store = memory();
 const added = L.addStyle([], "  夜市  ", preset.prompt, "user-1");
@@ -31,6 +36,18 @@ const updated = L.updateStyle(added.styles, "user-1", "夜市灯", "只要灯光
 assert.equal(L.removeStyle(updated, "user-1").length, 0);
 store.setItem(L.STYLE_KEY, JSON.stringify([{ id: preset.id, name: "冒充", prompt: "不要覆盖内置" }, { id: "ok", name: "手账", prompt: "保留" }]));
 assert.equal(JSON.stringify(L.readStyles(store).map((item) => item.id)), JSON.stringify(["ok"]));
+
+const imported = L.reconcileStyles(true, [], [{ id: "user-1", name: "夜市", prompt: "灯光" }]);
+assert.equal(imported.upload, true);
+assert.equal(imported.clearLocal, true);
+assert.equal(JSON.stringify(imported.styles), JSON.stringify([{ id: "user-1", name: "夜市", prompt: "灯光" }]));
+const kept = L.reconcileStyles(false, [{ id: "disk", name: "磁盘", prompt: "在" }], [{ id: "local", name: "浏览器", prompt: "旧" }]);
+assert.equal(kept.upload, false);
+assert.equal(kept.clearLocal, true);
+assert.equal(kept.styles[0].id, "disk");
+const freshEmpty = L.reconcileStyles(true, [], []);
+assert.equal(freshEmpty.upload, false);
+assert.equal(freshEmpty.styles.length, 0);
 
 const session = memory();
 const beats = memory();

@@ -58,7 +58,8 @@
     textarea, input[type="text"] { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: #fff; }
     textarea { min-height: 148px; margin-top: 12px; resize: vertical; }
     .save-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-    .save-row button { border-color: var(--line); background: #fff; color: var(--ink); }
+    .save-row button { display: inline-flex; align-items: center; gap: 6px; border-color: var(--line); background: #fff; color: var(--ink); }
+    .save-row svg { display: block; }
     .strip { display: flex; gap: 10px; overflow-x: auto; min-height: 92px; }
     .shot { flex: 0 0 132px; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
     .shot img { width: 100%; aspect-ratio: 16/9; object-fit: cover; background: var(--paper); display: block; }
@@ -112,11 +113,11 @@
       <section class="editor">
         <div id="chips" class="chips"></div>
         <details>
-          <summary>编辑提示词</summary>
+          <summary>编辑或添加提示词</summary>
           <textarea id="prompt" aria-label="提示词"></textarea>
           <input id="styleName" type="text" maxlength="24" autocomplete="off" aria-label="名称" placeholder="名称">
           <div class="save-row">
-            <button id="saveStyle" type="button">保存</button>
+            <button id="saveStyle" type="button"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5v11M1.5 7h11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>添加</button>
             <button id="updateStyle" type="button" disabled>更新</button>
             <button id="deleteStyle" type="button" disabled>删除</button>
           </div>

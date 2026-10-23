@@ -14,6 +14,8 @@
   var selected = { kind: "preset", id: L.PRESETS[0].id };
   var userStyles = [];
   var activeId = "";
+  var styleBusy = false;
+  var stylesReady = false;
 
   function setStatus(text) { $("status").textContent = text; }
 
@@ -82,9 +84,9 @@
     $("again").disabled = busy || !frozen || !prompt;
     $("retake").disabled = busy || !frozen;
     $("download").disabled = !resultUrl;
-    $("updateStyle").disabled = busy || selected.kind !== "user";
-    $("deleteStyle").disabled = busy || selected.kind !== "user";
-    $("saveStyle").disabled = busy;
+    $("saveStyle").disabled = busy || styleBusy || !stylesReady;
+    $("updateStyle").disabled = busy || styleBusy || !stylesReady || selected.kind !== "user";
+    $("deleteStyle").disabled = busy || styleBusy || !stylesReady || selected.kind !== "user";
     $("finderLabel").textContent = "取景";
   }
 
@@ -267,39 +269,102 @@
     link.click();
     link.remove();
   });
+  function postStyles(styles) {
+    styleBusy = true;
+    sync();
+    return fetch("/api/styles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ styles: styles })
+    }).then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok) throw new Error(data && data.error ? data.error : "风格没能存下。");
+        return Array.isArray(data.styles) ? data.styles : styles;
+      });
+    }).then(function (stored) {
+      userStyles = stored;
+      localStorage.removeItem(L.STYLE_KEY);
+      return stored;
+    }).catch(function (error) {
+      setStatus(error.message || "风格没能存下。");
+      return null;
+    }).then(function (stored) {
+      styleBusy = false;
+      sync();
+      return stored;
+    });
+  }
+
+  function loadStyles() {
+    var local = L.readStyles(localStorage);
+    return fetch("/api/styles").then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok) throw new Error(data && data.error ? data.error : "风格没能从本机读出。");
+        return data;
+      });
+    }).then(function (data) {
+      var plan = L.reconcileStyles(!!data.fresh, data.styles, local);
+      if (!plan.upload) {
+        userStyles = plan.styles;
+        if (plan.clearLocal) localStorage.removeItem(L.STYLE_KEY);
+        return;
+      }
+      return postStyles(plan.styles).then(function (stored) {
+        if (!stored) setStatus("风格没能从浏览器并到本机。");
+      });
+    }).catch(function (error) {
+      setStatus(error.message || "风格没能从本机读出。");
+    }).then(function () {
+      stylesReady = true;
+      renderStyles();
+    });
+  }
+
   $("saveStyle").addEventListener("click", function () {
+    if (styleBusy || !stylesReady) return;
+    var saved;
     try {
-      var saved = L.addStyle(userStyles, $("styleName").value, $("prompt").value);
-      userStyles = saved.styles;
-      L.writeStyles(localStorage, userStyles);
+      saved = L.addStyle(userStyles, $("styleName").value, $("prompt").value);
+    } catch (error) {
+      setStatus(error.message);
+      return;
+    }
+    postStyles(saved.styles).then(function (stored) {
+      if (!stored) return;
       selected = { kind: "user", id: saved.item.id };
       renderStyles();
-      setStatus("已保存。");
-    } catch (error) {
-      setStatus(error.message);
-    }
+      setStatus("已添加。");
+    });
   });
   $("updateStyle").addEventListener("click", function () {
-    if (selected.kind !== "user") return;
+    if (styleBusy || !stylesReady || selected.kind !== "user") return;
+    var next;
     try {
-      userStyles = L.updateStyle(userStyles, selected.id, $("styleName").value, $("prompt").value);
-      L.writeStyles(localStorage, userStyles);
+      next = L.updateStyle(userStyles, selected.id, $("styleName").value, $("prompt").value);
+    } catch (error) {
+      setStatus(error.message);
+      return;
+    }
+    postStyles(next).then(function (stored) {
+      if (!stored) return;
       renderStyles();
       setStatus("已更新。");
-    } catch (error) {
-      setStatus(error.message);
-    }
+    });
   });
   $("deleteStyle").addEventListener("click", function () {
-    if (selected.kind !== "user") return;
+    if (styleBusy || !stylesReady || selected.kind !== "user") return;
+    var next;
     try {
-      userStyles = L.removeStyle(userStyles, selected.id);
-      L.writeStyles(localStorage, userStyles);
-      choose("preset", L.PRESETS[0]);
-      setStatus("已删除。");
+      next = L.removeStyle(userStyles, selected.id);
     } catch (error) {
       setStatus(error.message);
+      return;
     }
+    postStyles(next).then(function (stored) {
+      if (!stored) return;
+      choose("preset", L.PRESETS[0]);
+      setStatus("已删除。");
+    });
   });
 
   function renderHistoryFromCache() {
@@ -346,7 +411,7 @@
     if (stream) stream.getTracks().forEach(function (track) { track.stop(); });
   });
 
-  userStyles = L.readStyles(localStorage);
+  userStyles = [];
   choose("preset", L.PRESETS[0]);
   var opened = L.touchSession(sessionStorage, localStorage, Date.now());
   sessionId = opened.id;
@@ -357,7 +422,7 @@
     setStatus("记录存不下。");
   }).then(function () {
     return openCamera();
-  }).then(loadKey);
+  }).then(loadKey).then(loadStyles);
   setInterval(function () { beat(Date.now()); }, 10000);
   setTimeout(function () { beat(Date.now()); }, L.STALE_MS + 1000);
 })();

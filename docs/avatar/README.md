@@ -88,7 +88,7 @@ Remove-Variable qwenSecret
 python run_avatar.py
 ```
 
-需要换模型时，在启动前设置 `DASHSCOPE_IMAGE_MODEL` 为 `qwen-image-3.0` 或 `qwen-image-3.0-pro`。没配密钥时仍可取景和保存风格。生成记录留在这次浏览器标签页里：刷新、回到主页再进来都还在；关掉标签页后再打开会清空，并且不写入项目文件夹。生成图不进入面捕角色。
+需要换模型时，在启动前设置 `DASHSCOPE_IMAGE_MODEL` 为 `qwen-image-3.0` 或 `qwen-image-3.0-pro`。没配密钥时仍可取景和保存风格。自己添加的风格写在本机 `data/selfie-styles.json`，不进仓库；「蜡笔手账」仍是内置风格，不能改、不能删。生成记录留在这次浏览器标签页里：刷新、回到主页再进来都还在；关掉标签页后再打开会清空，并且不写入项目文件夹。生成图不进入面捕角色。
 
 ## DeepSeek 配置
 

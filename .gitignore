@@ -1,5 +1,6 @@
 node_modules
 dist
+data
 
 # User-provided proprietary SDK dependency; never commit credentials or Core.
 docs/avatar/vendor/live2dcubismcore.min.js
