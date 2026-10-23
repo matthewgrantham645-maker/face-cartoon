@@ -6,7 +6,7 @@
 python run_avatar.py
 ```
 
-访问 http://localhost:8000/avatar/ ，更新后按 Ctrl+F5 强制刷新。默认角色是已经制作并绑定的二维插画，无须配置 API 或安装额外 Python 库。先勾选“打开 Live2D 同步对照”，点自动演示确认两侧均能运动，再开启面捕。默认使用“参考 KalidoKit 官方映射”；需要按个人眼睛、嘴部比例调节时，再切换“个人校准映射”。
+访问 http://localhost:8000/home/ 。主页可以进入实时面捕或 AI 自拍。面捕页仍是 http://localhost:8000/avatar/ ，更新后按 Ctrl+F5 强制刷新。默认角色是已经制作并绑定的二维插画，无须配置 API 或安装额外 Python 库。先勾选“打开 Live2D 同步对照”，点自动演示确认两侧均能运动，再开启面捕。默认使用“参考 KalidoKit 官方映射”；需要按个人眼睛、嘴部比例调节时，再切换“个人校准映射”。
 
 ![同一份手动动作输入下的二维网格和 Live2D 对照，使用实际渲染器输出](comparison-preview.png)
 
@@ -74,6 +74,21 @@ python run_avatar.py
 本版不会下载新的图像生成网络或在每帧进行生成推理。计算量来自关键点检测、姿态求解、网格变形与 WebGL 渲染；仍需在用户的摄像头和显卡上验证。卡顿时先使用 30 帧动画、15 或 20 次/秒跟踪，关闭额外光影。
 
 素材制作与上游来源见 `character/ASSET_NOTES.md` 和 `vendor/README-mesh-avatar.md`。`tools/mesh-avatar/build-layers.py` 是离线素材处理工具，需要 Pillow、NumPy、OpenCV；运行本页面不需要安装这些依赖。
+
+## AI 自拍
+
+主页的「AI 自拍」打开摄像头，按下自拍后把当前这一帧镜像画面和提示词框里的文字交给本机服务。服务使用千问图像编辑模型做图生图，默认 `qwen-image-2.1-turbo`。提示词按原文发送，不自动改写，也不加水印。输出比例跟着这张自拍走。
+
+密钥只用千问的 `DASHSCOPE_API_KEY`，放在启动服务的 PowerShell 里，不进网页、不进仓库：
+
+```powershell
+$qwenSecret = Read-Host "DashScope API Key" -AsSecureString
+$env:DASHSCOPE_API_KEY = [System.Net.NetworkCredential]::new('', $qwenSecret).Password
+Remove-Variable qwenSecret
+python run_avatar.py
+```
+
+需要换模型时，在启动前设置 `DASHSCOPE_IMAGE_MODEL` 为 `qwen-image-3.0` 或 `qwen-image-3.0-pro`。没配密钥时仍可取景和保存风格。生成记录留在这次浏览器标签页里：刷新、回到主页再进来都还在；关掉标签页后再打开会清空，并且不写入项目文件夹。生成图不进入面捕角色。
 
 ## DeepSeek 配置
 

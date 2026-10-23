@@ -18,6 +18,10 @@ MAX_BODY = 4 * 1024 * 1024
 CORE_URL = "https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"
 CORE_CACHE = None
 CORE_LOCK = threading.Lock()
+IMAGE_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+IMAGE_MODELS = ("qwen-image-2.1-turbo", "qwen-image-3.0", "qwen-image-3.0-pro")
+MAX_PROMPT = 4000
+MAX_RESULT = 8 * 1024 * 1024
 NUMBERS = {"hairVolume": (.8, 1.4), "faceWidth": (.82, 1.2), "jawWidth": (.75, 1.18),
            "faceLength": (.86, 1.15), "eyeSize": (.7, 1.4), "eyeSpacing": (.85, 1.2), "browThickness": (.7, 1.5)}
 
@@ -118,6 +122,118 @@ def analyze_appearance(image):
         raise RuntimeError("DeepSeek 返回的外观参数无法解析，请重试。") from None
 
 
+def validate_prompt(value):
+    if not isinstance(value, str):
+        raise ValueError("缺少提示词。")
+    text = value.strip()
+    if not text:
+        raise ValueError("提示词不能为空。")
+    if len(text) > MAX_PROMPT:
+        raise ValueError("提示词过长。")
+    return text
+
+
+def image_model():
+    model = os.environ.get("DASHSCOPE_IMAGE_MODEL", "qwen-image-2.1-turbo").strip() or "qwen-image-2.1-turbo"
+    if model not in IMAGE_MODELS:
+        raise ValueError("DASHSCOPE_IMAGE_MODEL 只能是 qwen-image-2.1-turbo、qwen-image-3.0 或 qwen-image-3.0-pro。")
+    return model
+
+
+def image_endpoint():
+    url = os.environ.get("DASHSCOPE_API_URL", "").strip() or IMAGE_URL
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    allowed = host in ("dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com") or host.endswith(".maas.aliyuncs.com")
+    if parsed.scheme != "https" or parsed.username or parsed.password or not allowed:
+        raise RuntimeError("DASHSCOPE_API_URL 必须是阿里云百炼的 HTTPS 地址。")
+    return url
+
+
+# Qwen stores results on rotating OSS buckets. Hosts look like
+# dashscope-result-sz.oss-cn-shenzhen.aliyuncs.com or dashscope-a717.oss-accelerate.aliyuncs.com.
+RESULT_HOST = re.compile(r"^dashscope-[a-z0-9-]+\.oss[.-][a-z0-9.-]+\.aliyuncs\.com$")
+
+
+def allowed_result_url(url):
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    return parsed.scheme == "https" and not parsed.username and not parsed.password and RESULT_HOST.fullmatch(host) is not None
+
+
+def public_provider_error(detail, key):
+    text = " ".join(str(detail).split())
+    if not text or (key and key in text):
+        return "千问拒绝了这次请求。"
+    return text[:180]
+
+
+def result_image_url(content):
+    images = [item["image"].strip() for item in content if isinstance(item, dict) and isinstance(item.get("image"), str) and item["image"].strip()]
+    https = [url for url in images if url.lower().startswith("https://")]
+    if not https:
+        raise RuntimeError("千问没有返回可下载的图片地址。")
+    return https[-1]
+
+
+def result_png(url):
+    if not allowed_result_url(url):
+        host = urlparse(url).hostname or urlparse(url).scheme or "未知"
+        raise RuntimeError("生成结果的图片地址不在预期的阿里云域名上（%s），已拒绝下载。" % host)
+    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "image/png,image/*;q=0.8"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            final = response.geturl() if hasattr(response, "geturl") else url
+            if not allowed_result_url(final):
+                host = urlparse(final).hostname or "未知"
+                raise RuntimeError("生成结果的图片地址不在预期的阿里云域名上（%s），已拒绝下载。" % host)
+            data = response.read(MAX_RESULT + 1)
+    except RuntimeError:
+        raise
+    except (urllib.error.URLError, TimeoutError, OSError):
+        raise RuntimeError("生成图已返回，但下载失败。请再生成一次。") from None
+    if not data.startswith(b"\x89PNG\r\n\x1a\n") or not 24 <= len(data) <= MAX_RESULT:
+        raise RuntimeError("生成图不是可用的 PNG。")
+    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+
+
+def generate_selfie(image, prompt, model=None):
+    """Send one frame and the prompt box text. The key stays in this process."""
+    key = os.environ.get("DASHSCOPE_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("尚未配置千问 API 密钥。")
+    model = model or image_model()
+    if model not in IMAGE_MODELS:
+        raise ValueError("DASHSCOPE_IMAGE_MODEL 只能是 qwen-image-2.1-turbo、qwen-image-3.0 或 qwen-image-3.0-pro。")
+    body = {"model": model, "input": {"messages": [{"role": "user", "content": [
+        {"image": image}, {"text": prompt}]}]}, "parameters": {"prompt_extend": False, "watermark": False, "n": 1}}
+    request = urllib.request.Request(image_endpoint(), data=json.dumps(body).encode(),
+                                     headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            payload = json.loads(response.read(1024 * 1024).decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        detail = ""
+        try:
+            parsed = json.loads(error.read(4096).decode("utf-8", "replace"))
+            detail = parsed.get("message") or parsed.get("code") or ""
+        except (json.JSONDecodeError, UnicodeError, AttributeError):
+            detail = ""
+        raise RuntimeError("千问返回 HTTP %s。%s" % (error.code, public_provider_error(detail, key))) from None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, UnicodeError):
+        raise RuntimeError("无法连接千问或返回无法解析，请检查网络后重试。") from None
+    if not isinstance(payload, dict):
+        raise RuntimeError("千问没有返回图片。")
+    if payload.get("code"):
+        raise RuntimeError("千问生图失败。%s" % public_provider_error(payload.get("message") or payload.get("code"), key))
+    try:
+        content = payload["output"]["choices"][0]["message"]["content"]
+        remote = result_image_url(content)
+    except (KeyError, IndexError, TypeError, StopIteration):
+        raise RuntimeError("千问没有返回图片。") from None
+    return result_png(remote)
+
+
 class Handler(SimpleHTTPRequestHandler):
     # Windows registry MIME overrides must not turn ESM modules into plain text.
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map,
@@ -148,7 +264,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.reply(403, {"error": "仅允许本机访问。"})
             return
         if urlparse(self.path).path == "/api/status":
-            self.reply(200, {"configured": bool(os.environ.get("DEEPSEEK_API_KEY", "").strip())})
+            self.reply(200, {"configured": bool(os.environ.get("DEEPSEEK_API_KEY", "").strip()),
+                             "selfie": bool(os.environ.get("DASHSCOPE_API_KEY", "").strip())})
             return
         if urlparse(self.path).path == "/api/live2d-core.js":
             try:
@@ -166,7 +283,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if self.path in ("/", "/index.html"):
             self.send_response(302)
-            self.send_header("Location", "/avatar/")
+            self.send_header("Location", "/home/")
             self.end_headers()
             return
         super().do_GET()
@@ -175,7 +292,8 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.allowed_origin():
             self.reply(403, {"error": "仅允许本机页面调用。"})
             return
-        if self.path != "/api/appearance":
+        path = urlparse(self.path).path
+        if path not in ("/api/appearance", "/api/selfie"):
             self.reply(404, {"error": "接口不存在。"})
             return
         try:
@@ -188,15 +306,36 @@ class Handler(SimpleHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
             if not isinstance(payload, dict):
                 raise ValueError("请求体必须是 JSON 对象。")
-            image = validate_image(payload.get("image"))
-            if not os.environ.get("DEEPSEEK_API_KEY", "").strip():
-                self.reply(503, {"error": "尚未配置 DeepSeek API 密钥，可继续使用本地生成。"})
-                return
-            self.reply(200, {"appearance": analyze_appearance(image)})
+            if path == "/api/appearance":
+                self.appearance(payload)
+            else:
+                self.selfie(payload)
         except (ValueError, UnicodeError):
             self.reply(400, {"error": "照片或请求格式无效。"})
         except RuntimeError as error:
             self.reply(502, {"error": str(error)})
+
+    def appearance(self, payload):
+        image = validate_image(payload.get("image"))
+        if not os.environ.get("DEEPSEEK_API_KEY", "").strip():
+            self.reply(503, {"error": "尚未配置 DeepSeek API 密钥，可继续使用本地生成。"})
+            return
+        self.reply(200, {"appearance": analyze_appearance(image)})
+
+    def selfie(self, payload):
+        try:
+            image = validate_image(payload.get("image"))
+            prompt = validate_prompt(payload.get("prompt"))
+            model = image_model()
+        except ValueError as error:
+            message = str(error)
+            code = 503 if message.startswith("DASHSCOPE_IMAGE_MODEL") else 400
+            self.reply(code, {"error": message})
+            return
+        if not os.environ.get("DASHSCOPE_API_KEY", "").strip():
+            self.reply(503, {"error": "尚未配置千问 API 密钥。"})
+            return
+        self.reply(200, {"image": generate_selfie(image, prompt, model)})
 
 
 def main():
@@ -204,8 +343,9 @@ def main():
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print("Open http://localhost:%s/avatar/" % args.port)
+    print("Open http://localhost:%s/home/" % args.port)
     print("DeepSeek:", "configured" if os.environ.get("DEEPSEEK_API_KEY", "").strip() else "not configured; local generation is available")
+    print("Qwen selfie:", "configured (%s)" % (os.environ.get("DASHSCOPE_IMAGE_MODEL", "").strip() or "qwen-image-2.1-turbo") if os.environ.get("DASHSCOPE_API_KEY", "").strip() else "not configured; set DASHSCOPE_API_KEY")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

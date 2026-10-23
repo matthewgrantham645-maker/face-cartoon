@@ -118,7 +118,9 @@
     }
     if(stream&&!generating){
       if(mode==='camera'&&now-lastFace>700){target=A.neutral();if(now-lastFace>1600)say('暂未看清人脸，角色回到中性表情。请面对镜头。');}
-      if(!pendingFrame&&video.readyState>=2&&now-lastSent>=1000/Number($('captureRate').value)&&video.currentTime!==lastVideo){
+      // Do not wait for currentTime to change. Some local cameras keep it at 0,
+      // which previously froze the character after the first frame.
+      if(!pendingFrame&&video.readyState>=2&&video.videoWidth>0&&now-lastSent>=1000/Number($('captureRate').value)){
         lastSent=now;lastVideo=video.currentTime;
         pendingFrame=send(video,'live').catch(error=>{stop();say('面捕失败：'+error.message);console.error(error);}).finally(()=>pendingFrame=null);
       }

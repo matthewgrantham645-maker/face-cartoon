@@ -12,7 +12,7 @@
     const strength=bound(turnStrength,.2,.6,.4);
     let yaw=Math.tanh(bound(p.yaw,-1,1)*1.6),pitch=Math.tanh(bound(p.pitch,-1,1)*1.6);
     const combined=Math.max(1,Math.hypot(yaw,pitch));yaw/=combined;pitch/=combined;
-    const angleX=yaw*30*strength,angleY=-pitch*24*strength,angleZ=bound(p.roll,-1,1)*24,follow=bound(bodyFollow,0,.5,.3);
+    const angleX=yaw*30*strength,angleY=-pitch*24*strength,angleZ=bound(p.roll,-1,1)*24,follow=bound(bodyFollow,0,.5,0);
     return {angleX,angleY,angleZ,
       eyeROpen:bound(p.eyeL,0,1,1),eyeLOpen:bound(p.eyeR,0,1,1),
       eyeSmile:Math.max(0,bound(p.smile,-1,1))*.3,

@@ -58,9 +58,9 @@ class AvatarServerTests(unittest.TestCase):
         thread.start()
         url = "http://127.0.0.1:%s" % server.server_address[1]
         try:
-            with patch.dict(os.environ, {"DEEPSEEK_API_KEY": ""}):
+            with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "", "DASHSCOPE_API_KEY": ""}):
                 with urllib.request.urlopen(url + "/api/status") as response:
-                    self.assertEqual(json.load(response), {"configured": False})
+                    self.assertEqual(json.load(response), {"configured": False, "selfie": False})
                 with urllib.request.urlopen(url + "/avatar/") as response:
                     self.assertIn("vendor/kalidokit.umd.js", response.read().decode())
                 with urllib.request.urlopen(url + "/avatar/illustrated.mjs") as response:

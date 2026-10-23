@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI-FacialLab</title>
+  <style>
+    :root {
+      --canvas: #F7F6F2;
+      --ink: #050505;
+      --muted: #77736B;
+      --line: #E5E1D8;
+      --blue: #0057FF;
+      --paper: #FFF0C7;
+      --plate: #F4F1EA;
+      --shadow: 0 16px 40px rgba(28, 28, 28, .06);
+      --radius: 24px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); color: var(--ink); font: 16px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    main { max-width: 1120px; margin: auto; padding: 36px 32px 64px; }
+    .brand { margin: 0; font-size: 28px; font-weight: 650; letter-spacing: 0; }
+    .doors { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 28px; }
+    .door { display: flex; flex-direction: column; overflow: hidden; text-decoration: none; color: inherit; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .door:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+    .portrait, .sample { display: block; height: 540px; background: var(--plate); }
+    .portrait img, .sample-lens img { width: 100%; height: 100%; object-fit: cover; object-position: center 16%; }
+    .sample { display: grid; grid-template-columns: 1.15fr .85fr; }
+    .sample-lens { position: relative; overflow: hidden; background: #eceae4; }
+    .ring { position: absolute; left: 50%; top: 46%; width: 58%; aspect-ratio: 1; transform: translate(-50%, -50%); border: 2px solid var(--blue); border-radius: 50%; box-shadow: 0 0 0 10px rgba(0, 87, 255, .08); pointer-events: none; }
+    .sample-paper { position: relative; background: var(--paper); overflow: hidden; }
+    .sample-paper svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .sample-paper b { position: absolute; left: 16px; bottom: 16px; color: #8a6a45; font-size: 13px; font-weight: 600; }
+    .copy { padding: 18px 20px 20px; }
+    .copy strong { font-size: 26px; font-weight: 650; }
+    @media (prefers-reduced-motion: no-preference) {
+      .door { transition: transform .18s ease, border-color .18s ease; }
+      .door:hover { transform: translateY(-2px); border-color: #cfcabe; }
+    }
+    @media (max-width: 800px) {
+      main { padding: 24px 16px 40px; }
+      .brand { font-size: 24px; }
+      .doors { grid-template-columns: 1fr; }
+      .portrait, .sample { height: 280px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 class="brand">AI-FacialLab</h1>
+    <nav class="doors" aria-label="功能入口">
+      <a class="door" href="/avatar/">
+        <span class="portrait"><img src="../avatar/character/source.png" alt=""></span>
+        <span class="copy"><strong>实时面捕</strong></span>
+      </a>
+      <a class="door" href="/selfie/">
+        <span class="sample" aria-hidden="true">
+          <span class="sample-lens">
+            <img src="../avatar/character/source.png" alt="">
+            <span class="ring"></span>
+          </span>
+          <span class="sample-paper">
+            <svg viewBox="0 0 180 320" preserveAspectRatio="xMidYMid slice">
+              <path d="M28 58c24-20 58-8 74 8 14 14 6 30-10 26" fill="none" stroke="#f09ab8" stroke-width="11" stroke-linecap="round"/>
+              <path d="M86 92c20 10 42 2 52-12" fill="none" stroke="#7ec8c3" stroke-width="9" stroke-linecap="round"/>
+              <path d="M34 148c12 22 6 40-8 52" fill="none" stroke="#f2d36b" stroke-width="10" stroke-linecap="round"/>
+              <path d="M46 214c34 8 62-6 84 10" fill="none" stroke="#c7b6f4" stroke-width="8" stroke-linecap="round"/>
+              <path d="M24 252c28 4 40-2 68 6" fill="none" stroke="#f09ab8" stroke-width="5" stroke-linecap="round"/>
+            </svg>
+            <b>蜡笔手账</b>
+          </span>
+        </span>
+        <span class="copy"><strong>AI 自拍</strong></span>
+      </a>
+    </nav>
+  </main>
+</body>
+</html>
