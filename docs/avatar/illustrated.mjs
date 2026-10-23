@@ -1,4 +1,4 @@
-import {loadMeshAvatar,DEFAULT_LIGHTING} from './vendor/mesh-avatar-0.2.1.mjs?v=9';
+import {loadMeshAvatar,DEFAULT_LIGHTING} from './vendor/mesh-avatar-0.2.1.mjs?v=10';
 
 // The runtime includes documented portrait-only patches. This adapter owns loading,
 // frame pacing, local imports and the existing application's pose conversion.

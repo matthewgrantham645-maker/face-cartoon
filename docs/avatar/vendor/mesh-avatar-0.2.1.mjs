@@ -1,4 +1,4 @@
-// Locally patched for portrait-v9: stationary background weights, visible lids,
+// Locally patched for portrait-v10: stationary background weights, visible lids,
 // original lip textures and tooth-free mouth. See README-mesh-avatar.md.
 /*! fflate
 MIT License
@@ -619,18 +619,18 @@ function Ln(n, e) {
   }
 
   vec4 mouth(vec2 p, vec4 base) {
-    float open = uMouthState.x;
+    float open = ${e.portrait?.version === 2 ? "clamp(uMouthState.x, 0.0, 1.0)" : "uMouthState.x"};
     if (open < 0.01) return base;
     vec2 d = vec2(cos(uMouth.z), sin(uMouth.z)), n = vec2(-d.y, d.x);
     vec2 r = p - uMouth.xy;
     float s = dot(r, d) / uMouth.w, t = dot(r, n);
     float form = uMouthState.y;                       // -1 wide "i" .. +1 round "o"
-    float wf = ${e.portrait?.version === 2 ? "mix(0.96, 0.64, clamp(form * 0.5 + 0.5, 0.0, 1.0))" : "mix(0.78, 0.46, clamp(form * 0.5 + 0.5, 0.0, 1.0))"};
+    float wf = ${e.portrait?.version === 2 ? "mix(0.94, 0.86, clamp(form * 0.5 + 0.5, 0.0, 1.0))" : "mix(0.78, 0.46, clamp(form * 0.5 + 0.5, 0.0, 1.0))"};
     float k = 1.0 - (s / wf) * (s / wf);
     if (k <= 0.0) return base;
     float line = uMouthState.z * (1.0 - s * s);
-    float hk = pow(k, mix(0.55, 0.85, clamp(form, 0.0, 1.0)));
-    float H = ${e.portrait?.version === 2 ? "uMouth.w * 0.60" : "mix(20.0, 26.0, clamp(form, 0.0, 1.0))"};
+    float hk = ${e.portrait?.version === 2 ? "sqrt(k)" : "pow(k, mix(0.55, 0.85, clamp(form, 0.0, 1.0)))"};
+    float H = ${e.portrait?.version === 2 ? "uMouth.w * 0.24" : "mix(20.0, 26.0, clamp(form, 0.0, 1.0))"};
     float up = line - 0.6 - open * ${e.portrait?.version === 2 ? "H * 0.25" : "2.5"} * hk;
     float lo = line + open * H * ${e.portrait?.version === 2 ? "0.75" : "1.0"} * hk;
     float cov = smoothstep(-0.7, 0.7, t - up) * smoothstep(-0.7, 0.7, lo - t);
@@ -1847,7 +1847,8 @@ async function Jn(n, e) {
       const Q = `eye${R}_${W}`, ne = c(_[Q], W === "ball" ? t.mesh.eyeBallCell : t.mesh.eyeCell, Ue(w[Q]), w[Q].width), ee = [];
       for (let oe = 0; oe < ne.rest.length / 2; oe++) ee.push(l(ne.rest[oe * 2], ne.rest[oe * 2 + 1], 0));
       const he = I.addLayer(Q, w[Q], ne, { eyeBall: W === "ball" ? R : void 0 });
-      C.push({ e: M, eye: R, part: W, mesh: ne, W: ee, layer: he });
+      const closedLid = t.portrait?.blinkLid === true && W === "crease";
+      C.push({ e: M, eye: R, part: closedLid ? "lash" : W, closedLid, mesh: ne, W: ee, layer: he });
     }
   });
   const portraitLips = t.portrait?.version === 2 ? ["upper", "lower"].map(part => {
@@ -1889,7 +1890,8 @@ async function Jn(n, e) {
     const ee = (K) => $ && t.portrait?.version !== 2 ? 1 : K;
     for (const K of C) {
       const Pe = ee(K.eye === 0 ? R.eyeROpen : R.eyeLOpen), Tt = K.eye === 0 ? R.eyeSmile : R.eyeSmileL ?? R.eyeSmile;
-      K.layer.alpha = d(K.part, Pe, Tt);
+      const closure = Math.min(1, Math.max(0, (0.55 - Pe) / 0.40));
+      K.layer.alpha = K.closedLid ? closure * closure * (3 - 2 * closure) : d(K.part, Pe, Tt);
       const Ot = K.mesh.rest, Rt = K.mesh.pos;
       for (let Se = 0; Se < K.W.length; Se++) {
         const Lt = Ot[Se * 2], mn = Ot[Se * 2 + 1];
@@ -1899,13 +1901,15 @@ async function Jn(n, e) {
     // Move original lip textures around a continuous, tooth-free aperture.
     for (const lip of portraitLips) for (let i = 0; i < lip.W.length; i++) {
       const px = lip.mesh.rest[i * 2], py = lip.mesh.rest[i * 2 + 1];
-      const nx = (px - t.mouth.cx) / t.mouth.halfLen;
+      // Match shader coordinates, width and rounded profile exactly, including tilted mouths.
+      const ca = Math.cos(t.mouth.angle), sa = Math.sin(t.mouth.angle);
+      const nx = ((px - t.mouth.cx) * ca + (py - t.mouth.cy) * sa) / t.mouth.halfLen;
       const form = Math.min(1, Math.max(0, R.mouthForm * 0.5 + 0.5));
-      const width = 0.96 + (0.64 - 0.96) * form;
+      const width = 0.94 + (0.86 - 0.94) * form;
       const k = Math.max(0, 1 - (nx / width) ** 2);
-      const H = t.mouth.halfLen * 0.60;
-      const shift = R.mouthOpen * H * (lip.part === "upper" ? -0.25 : 0.75) * k ** 0.65;
-      m(px, py + shift, lip.W[i], R, W, g);
+      const H = t.mouth.halfLen * 0.24;
+      const shift = Math.min(1, Math.max(0, R.mouthOpen)) * H * (lip.part === "upper" ? -0.25 : 0.75) * Math.sqrt(k);
+      m(px - sa * shift, py + ca * shift, lip.W[i], R, W, g);
       lip.mesh.pos[i * 2] = g[0]; lip.mesh.pos[i * 2 + 1] = g[1];
     }
     const he = $?.update(R, W, M, Fn(q.name, L.mode === "manual" ? null : L.expr));

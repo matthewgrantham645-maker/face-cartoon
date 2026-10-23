@@ -1,6 +1,6 @@
 // Browser-side base rig for a single portrait; original image textures are retained.
 // Geometry targets the existing MIT mesh-avatar runtime; it does not create Cubism files.
-import {packAvatar,validateRig} from './vendor/mesh-avatar-0.2.1.mjs?v=9';
+import {packAvatar,validateRig} from './vendor/mesh-avatar-0.2.1.mjs?v=10';
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const ellipse=(cx,cy,rx,ry)=>({cx,cy,rx:Math.max(1,rx),ry:Math.max(1,ry)});
 const clone=value=>JSON.parse(JSON.stringify(value));
@@ -58,7 +58,7 @@ export function rigForBinding(input,w,h){
   const b=normalizeBinding(input,w,h),head=b.head,ex=b.eye0,ey=b.eye1,m=b.mouth;
   const hx=head.x+head.w/2,hy=head.y+head.h/2,chin=Math.max(m.y+m.h*2,head.y+head.h*.92);
   const eyes=[ex,ey].map(e=>{const poly=opening(e);return {opening:poly,roi:[[e.x,e.y],[e.x+e.w,e.y],[e.x+e.w,e.y+e.h],[e.x,e.y+e.h]],...curves(poly)};});
-  const rig={version:1,portrait:{version:2,teeth:false},image:{width:w,height:h},head:{...ellipse(hx,hy,head.w/2,head.h/2),shiftX:head.w*.065,shiftY:head.h*.035,pivotX:hx,pivotY:chin,maxRoll:.10,weightBand:[chin,Math.max(chin+4,Math.min(h,chin+head.h*.28))],turnBand:[chin,Math.max(chin+5,Math.min(h,chin+head.h*.3))]},
+  const rig={version:1,portrait:{version:2,teeth:false,blinkLid:true},image:{width:w,height:h},head:{...ellipse(hx,hy,head.w/2,head.h/2),shiftX:head.w*.065,shiftY:head.h*.035,pivotX:hx,pivotY:chin,maxRoll:.10,weightBand:[chin,Math.max(chin+4,Math.min(h,chin+head.h*.28))],turnBand:[chin,Math.max(chin+5,Math.min(h,chin+head.h*.3))]},
     body:{pivotX:w/2,pivotY:h*1.15,maxRoll:.02,breathBand:[h*.78,h],rollBand:[h*.75,h],chest:ellipse(w/2,h*.9,w*.25,h*.13),shoulders:[ellipse(w*.2,h*.86,w*.12,h*.12),ellipse(w*.8,h*.86,w*.12,h*.12)]},
     face:{nose:ellipse((ex.x+ex.w+ey.x)/2,(ex.y+ex.h+m.y)/2,head.w*.09,head.h*.13),mouth:ellipse(m.x+m.w/2,m.y+m.h/2,m.w*.8,m.h*3),eyeA:ellipse(ex.x+ex.w/2,ex.y+ex.h/2,ex.w*.8,ex.h*1.6),eyeB:ellipse(ey.x+ey.w/2,ey.y+ey.h/2,ey.w*.8,ey.h*1.6),earL:ellipse(head.x+head.w*.12,hy,head.w*.08,head.h*.15),earR:ellipse(head.x+head.w*.88,hy,head.w*.08,head.h*.15),
       brow:{...ellipse(hx,Math.min(ex.y,ey.y)-head.h*.04,head.w*.36,head.h*.04),band:[Math.min(ex.y,ey.y)-head.h*.03,Math.min(ex.y,ey.y)]},jaw:{...ellipse(m.x+m.w/2,chin,head.w*.22,head.h*.12),band:[m.y+m.h,Math.max(m.y+m.h+2,chin)]}},
@@ -89,7 +89,7 @@ function eyeLayers(source,base,box,eye){
   if(!samples.length)throw Error('眼睛区域周围没有有效像素，请校正区域。');
   samples.sort((a,b)=>(a[0]+a[1]+a[2])-(b[0]+b[1]+b[2]));const skin=samples[Math.floor(samples.length*.65)];
   let fill=new Float32Array(w*h*3),next=new Float32Array(fill.length),mask=new Uint8Array(w*h);
-  const parts={ball:makeCanvas(w,h),lash:makeCanvas(w,h),low:makeCanvas(w,h),crease:makeCanvas(1,1)},pixels={};
+  const parts={ball:makeCanvas(w,h),lash:makeCanvas(w,h),low:makeCanvas(w,h),crease:makeCanvas(w,h)},pixels={};
   for(const k of ['ball','lash','low'])pixels[k]=new ImageData(w,h);
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
     const i=y*w+x,p=i*4,gx=x+x0,gy=y+y0,u=(gx-eye.x0)/(eye.x1-eye.x0),top=interpolate(eye.top,u),bot=interpolate(eye.bot,u);
@@ -112,7 +112,9 @@ function eyeLayers(source,base,box,eye){
   for(let i=0;i<w*h;i++)if(mask[i])for(let k=0;k<3;k++)patch.data[i*4+k]=Math.round(fill[i*3+k]);
   base.getContext('2d').putImageData(patch,x0,y0);
   for(const k of ['ball','lash','low'])parts[k].getContext('2d').putImageData(pixels[k],0,0);
-  const lash=parts.lash.getContext('2d'),ink=[];
+  // Keep the original open eye untouched. A separate closure-only stroke is
+  // faded in by the runtime; it must never be baked into the open lash texture.
+  const lash=parts.crease.getContext('2d'),ink=[];
   for(let p=0;p<data.length;p+=4)if(data[p+3]>180)ink.push([data[p],data[p+1],data[p+2]]);
   ink.sort((a,b)=>(a[0]+a[1]+a[2])-(b[0]+b[1]+b[2]));
   const color=ink[Math.floor(ink.length*.08)]||[55,38,32];
@@ -168,7 +170,7 @@ function mouthLayers(source,base,box,rig){
     const diff=Math.max(...skin.map((v,k)=>Math.abs(v-data[p+k]))),dark=(skin[0]+skin[1]+skin[2]-data[p]-data[p+1]-data[p+2])/3;
     mask[i]=rad<1&&(diff>16||dark>9)?1:0;
     for(let k=0;k<3;k++)fill[i*3+k]=mask[i]?skin[k]:data[p+k];
-    if(mask[i]){const t=clamp((gx-box.x)/box.w,0,1)*24,j=Math.min(23,Math.floor(t)),line=filtered[j]+(filtered[j+1]-filtered[j])*(t-j),target=gy<=line?upper:lower;for(let k=0;k<4;k++)target.data[p+k]=data[p+k];}
+    if(mask[i]){const a=rig.mouth.angle,dx=gx-rig.mouth.cx,dy=gy-rig.mouth.cy,u=(dx*Math.cos(a)+dy*Math.sin(a))/rig.mouth.halfLen,v=-dx*Math.sin(a)+dy*Math.cos(a),line=rig.mouth.bow*(1-u*u),target=v<=line?upper:lower;for(let k=0;k<4;k++)target.data[p+k]=data[p+k];}
   }
   const visited=new Uint8Array(mask.length),queue=new Int32Array(mask.length),components=[];
   for(let seed=0;seed<mask.length;seed++)if(mask[seed]&&!visited[seed]){let read=0,write=0;queue[write++]=seed;visited[seed]=1;const group=[];
@@ -188,7 +190,7 @@ export async function buildPortrait(source,input,name='我的生成形象'){
   const jobs=[];
   for(let i=0;i<2;i++){
     const built=eyeLayers(source,base,binding['eye'+i],rig.eyes[i]);
-    for(const [part,c]of Object.entries(built.parts)){const key=`eye${i}_${part}`;layers[key]=part==='crease'?[0,0,1,1]:built.rect;jobs.push(pngBytes(c).then(bytes=>files[`built/${key}.png`]=bytes));}
+    for(const [part,c]of Object.entries(built.parts)){const key=`eye${i}_${part}`;layers[key]=built.rect;jobs.push(pngBytes(c).then(bytes=>files[`built/${key}.png`]=bytes));}
     const {x0,x1,top,bot}=rig.eyes[i];eyes.push({x0,x1,top,bot});
   }
   const lips=mouthLayers(source,base,binding.mouth,rig);
@@ -196,7 +198,7 @@ export async function buildPortrait(source,input,name='我的生成形象'){
   const subject=subjectMotionMask(source,binding);layers.subject=[0,0,w,h];jobs.push(pngBytes(subject).then(bytes=>files['built/subject.png']=bytes));
   const hairmask=makeCanvas(w,h); // No fabricated hair dynamics for an unknown picture.
   files['avatar.json']=jsonBytes({format:'mesh-avatar',version:1,name,source:'source.png',author:'User portrait, browser base rig'});
-  files['rig.json']=jsonBytes(rig);files['built/layers.json']=jsonBytes({version:1,size:[w,h],build:'portrait-v9',layers,eyes});
+  files['rig.json']=jsonBytes(rig);files['built/layers.json']=jsonBytes({version:1,size:[w,h],build:'portrait-v10',layers,eyes});
   jobs.push(pngBytes(base).then(b=>files['built/base.png']=b),pngBytes(hairmask).then(b=>files['built/hairmask.png']=b),pngBytes(source).then(b=>files['source.png']=b));
   await Promise.all(jobs);const archive=packAvatar(files);
   return {archive,binding:clone(binding),rig};

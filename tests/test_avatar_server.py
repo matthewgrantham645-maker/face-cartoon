@@ -64,8 +64,8 @@ class AvatarServerTests(unittest.TestCase):
                 with urllib.request.urlopen(url + "/avatar/") as response:
                     page = response.read().decode()
                     self.assertIn("vendor/kalidokit.umd.js", page)
-                    self.assertIn("illustrated.mjs?v=9", page)
-                    self.assertIn("portrait-controller.mjs?v=9", page)
+                    self.assertIn("illustrated.mjs?v=10", page)
+                    self.assertIn("portrait-controller.mjs?v=10", page)
                     self.assertEqual(response.headers.get("Cache-Control"), "no-cache")
                 with urllib.request.urlopen(url + "/avatar/illustrated.mjs") as response:
                     self.assertEqual(response.headers.get_content_type(), "text/javascript")

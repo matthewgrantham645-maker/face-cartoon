@@ -1,4 +1,4 @@
-import {decodePortrait,defaultBinding,normalizeBinding,bindingFromLandmarks,buildPortrait} from './portrait-rig.mjs?v=9';
+import {decodePortrait,defaultBinding,normalizeBinding,bindingFromLandmarks,buildPortrait} from './portrait-rig.mjs?v=10';
 const $=id=>document.getElementById(id),Store=window.PortraitStore;
 let source=null,binding=null,record=null,name='',revision=0,edited=0,building=false,detecting=false,queuedDetection=0,drag=null,archive=null,appliedBinding=null,clickPoints=null;
 const colors={head:'#ad70ed',eye0:'#2879ef',eye1:'#17a485',mouth:'#e86e49'};
@@ -113,7 +113,7 @@ $('retryPortraitVersion').onclick=async()=>{
   try{
     const saved=normalizeBinding(binding,source.width,source.height);
     if(!await Store.saveBinding(record.id,saved))await Store.put({...record,portraitBinding:saved});
-    const url=new URL(location.href);url.searchParams.set('portrait',record.id);url.searchParams.set('v','9');location.replace(url.href);
+    const url=new URL(location.href);url.searchParams.set('portrait',record.id);url.searchParams.set('v','10');location.replace(url.href);
   }catch(error){say('未能保存绑定，暂未刷新。请保留当前页面，稍后重试：'+error.message);}
 };
 $('cancelPortrait').onclick=()=>{if(building)return;revision++;$('portraitEditor').hidden=true;};
