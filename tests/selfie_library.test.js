@@ -61,3 +61,19 @@ assert.equal(JSON.stringify(calls[2]), JSON.stringify(["translate", 320, 0]));
 assert.equal(JSON.stringify(calls[3]), JSON.stringify(["scale", -1, 1]));
 assert.equal(JSON.stringify(calls[4]), JSON.stringify(["drawImage", "video", 0, 0, 320, 240]));
 console.log("selfie library ok");
+
+
+// Every selectable preset must produce a valid request, including supplied long prompts.
+assert.equal(L.PRESETS.length, 24);
+assert.equal(new Set(L.PRESETS.map(s => s.id)).size, 24);
+assert.ok(L.PRESETS.some(s => s.id === L.DEFAULT_STYLE));
+for (const s of L.PRESETS) {
+  assert.ok(s.name && s.category && s.note);
+  assert.ok(L.buildPrompt(s.prompt, true).length <= 4000);
+  assert.ok(L.buildPrompt(s.prompt, true).includes("嘴唇闭合"));
+}
+assert.ok(!L.buildPrompt("自由构图", false).includes("嘴唇闭合"));
+assert.throws(() => L.buildPrompt("x".repeat(4000), true), /过长/);
+for (const mime of ["jpeg", "png", "webp"]) assert.ok(L.imageDataURL(`data:image/${mime};base64,AAAA`));
+assert.ok(!L.imageDataURL("https://example.com/a.png"));
+assert.ok(!L.imageDataURL("data:image/svg+xml;base64,AAAA"));

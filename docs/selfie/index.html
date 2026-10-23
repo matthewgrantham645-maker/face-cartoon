@@ -3,133 +3,46 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI 自拍 · AI-FacialLab</title>
-  <style>
-    :root {
-      --canvas: #F7F6F2;
-      --ink: #050505;
-      --muted: #77736B;
-      --line: #E5E1D8;
-      --blue: #0057FF;
-      --paper: #FFF0C7;
-      --shadow: 0 16px 40px rgba(28, 28, 28, .06);
-      --radius: 24px;
-    }
-    * { box-sizing: border-box; }
-    [hidden] { display: none !important; }
-    body { margin: 0; background: var(--canvas); color: var(--ink); font: 16px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
-    button, input, textarea { font: inherit; color: inherit; }
-    button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
-    main { max-width: 1180px; margin: auto; padding: 28px 32px 56px; }
-    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-    .brand { margin: 0; font-size: 22px; font-weight: 650; }
-    .brand span { margin-left: 10px; color: var(--muted); font-weight: 500; font-size: 15px; }
-    .mast { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; }
-    a { color: var(--ink); text-decoration: none; }
-    a:hover { color: var(--blue); }
-    .badge { padding: 4px 10px; border-radius: 999px; background: #e8f0ff; color: var(--blue); font-size: 12px; }
-    .stage { margin-top: 22px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; }
-    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    h2 { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
-    .lens, .result { position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 16/9; background: #eceae4; }
-    .result { background: var(--paper); }
-    video, .lens img, .result img { display: block; width: 100%; height: 100%; object-fit: contain; }
-    video { transform: scaleX(-1); background: #eceae4; }
-    .aperture { position: absolute; left: 50%; top: 50%; width: 34%; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; border: 2px solid var(--blue); box-shadow: 0 0 0 10px rgba(0, 87, 255, .08), inset 0 0 0 1px rgba(0, 87, 255, .35); pointer-events: none; }
-    .aperture::before { content: ""; position: absolute; inset: -18px; border-radius: 50%; border: 1px solid rgba(5, 5, 5, .16); }
-    .marks { position: absolute; inset: 16px; pointer-events: none; background: linear-gradient(#050505, #050505) left top / 22px 1.5px no-repeat, linear-gradient(#050505, #050505) left top / 1.5px 22px no-repeat, linear-gradient(#050505, #050505) right top / 22px 1.5px no-repeat, linear-gradient(#050505, #050505) right top / 1.5px 22px no-repeat, linear-gradient(#050505, #050505) left bottom / 22px 1.5px no-repeat, linear-gradient(#050505, #050505) left bottom / 1.5px 22px no-repeat, linear-gradient(#050505, #050505) right bottom / 22px 1.5px no-repeat, linear-gradient(#050505, #050505) right bottom / 1.5px 22px no-repeat; }
-    .tag { position: absolute; left: 12px; top: 12px; padding: 2px 8px; border-radius: 999px; background: #fff; font-size: 12px; }
-    .empty { position: absolute; inset: 0; }
-    .controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 20px; margin-top: 18px; }
-    button { border: 1px solid transparent; border-radius: 999px; background: transparent; padding: 8px 12px; color: var(--muted); cursor: pointer; }
-    button:disabled { opacity: .38; cursor: default; }
-    button.primary { width: 84px; height: 84px; border-radius: 50%; background: var(--blue); color: #fff; font-weight: 650; box-shadow: 0 0 0 7px #fff, 0 0 0 8px var(--line); }
-    button.primary:disabled { background: #b9c7ea; }
-    .quiet { display: flex; flex-wrap: wrap; gap: 4px; }
-    .quiet button:hover:not(:disabled) { color: var(--ink); }
-    .status { min-height: 1.4em; margin: 12px 0 0; text-align: center; color: var(--muted); font-size: 13px; }
-    .below { display: grid; grid-template-columns: 1.4fr .8fr; gap: 16px; margin-top: 16px; }
-    .editor { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px 18px; }
-    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-    .chips button { border-color: var(--line); background: #fff; color: var(--ink); }
-    .chips button[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
-    details { margin-top: 14px; }
-    summary { cursor: pointer; color: var(--muted); font-size: 14px; }
-    textarea, input[type="text"] { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: #fff; }
-    textarea { min-height: 148px; margin-top: 12px; resize: vertical; }
-    .save-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-    .save-row button { border-color: var(--line); background: #fff; color: var(--ink); }
-    .strip { display: flex; gap: 10px; overflow-x: auto; min-height: 92px; }
-    .shot { flex: 0 0 132px; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
-    .shot img { width: 100%; aspect-ratio: 16/9; object-fit: cover; background: var(--paper); display: block; }
-    .shot span { display: block; padding: 4px 8px 6px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-    .shot[aria-current="true"] { border-color: var(--blue); }
-    #historyEmpty { margin: 0; color: var(--muted); font-size: 13px; }
-    @media (max-width: 860px) {
-      main { padding: 18px 14px 36px; }
-      .compare, .below { grid-template-columns: 1fr; }
-      button.primary { width: 72px; height: 72px; }
-    }
-  </style>
+  <title>照片生图 · AI-FacialLab</title>
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <main>
-    <header>
-      <h1 class="brand">AI-FacialLab <span>自拍</span></h1>
-      <div class="mast"><a href="/home/">主页</a> <span id="keyState" class="badge">配置</span></div>
-    </header>
-    <section class="stage">
-      <div class="compare">
-        <div>
-          <h2 id="finderLabel">取景</h2>
-          <div class="lens">
-            <video id="video" muted autoplay playsinline></video>
-            <img id="frozen" alt="已定格的自拍" hidden>
-            <span class="aperture" aria-hidden="true"></span>
-            <span class="marks" aria-hidden="true"></span>
-            <span id="freezeTag" class="tag" hidden>已定格</span>
-          </div>
-        </div>
-        <div>
-          <h2>生成图</h2>
-          <div class="result">
-            <img id="result" alt="生成的自拍" hidden>
-            <p id="resultEmpty" class="empty"></p>
-          </div>
-        </div>
+<main>
+  <header><a class="brand" href="/home/">AI-FacialLab<span>照片生图</span></a><nav><a href="/home/">主页</a><a href="/avatar/">实时面捕</a><span class="badge">第七版</span></nav></header>
+  <div class="intro"><div><p class="eyebrow">把你画进不同的世界</p><h1>一张照片，多种画风。</h1><p>上传已有照片，或用摄像头拍一张。选好风格，再生成你的新形象。</p></div><span id="keyState" class="badge">正在检查生图服务</span></div>
+  <div class="compare">
+    <section class="card source-card">
+      <div class="section-head"><h2><span class="step">01</span>选择原照片</h2><button id="retake" class="subtle" disabled>更换照片</button></div>
+      <div class="source-tabs" role="tablist" aria-label="照片来源"><button id="sourceUpload" role="tab" aria-selected="true" aria-controls="uploadPane">上传照片</button><button id="sourceCamera" role="tab" aria-selected="false" aria-controls="cameraPane">摄像头拍照</button></div>
+      <div id="dropZone" class="lens">
+        <video id="video" muted autoplay playsinline hidden></video>
+        <img id="frozen" alt="用于生成的原照片" hidden>
+        <div id="sourceEmpty" class="placeholder"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true"><rect x="7" y="8" width="34" height="32" rx="8" stroke="currentColor" stroke-width="1.5"/><circle cx="18" cy="19" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M10 34l10-10 7 7 5-5 7 8" stroke="currentColor" stroke-width="1.5"/></svg><strong id="sourceEmptyTitle">将人像照片拖到这里</strong><span id="sourceEmptyText">也可以点击下方按钮选择照片</span></div>
+        <span id="freezeTag" class="tag" hidden>已选照片</span>
       </div>
-      <div class="controls">
-        <button id="shutter" class="primary" type="button" disabled>自拍</button>
-        <div class="quiet">
-          <button id="again" type="button" disabled>再生成</button>
-          <button id="retake" type="button" disabled>重拍</button>
-          <button id="download" type="button" disabled>下载这张图</button>
-        </div>
-      </div>
-      <p id="status" class="status" role="status" aria-live="polite">正在打开摄像头…</p>
+      <div id="uploadPane" role="tabpanel" aria-labelledby="sourceUpload"><input id="upload" type="file" accept="image/jpeg,image/png,image/webp" hidden><button id="choosePhoto" class="secondary">选择照片</button><p class="small">支持 JPG、PNG、WebP，最大 12 MB。建议使用清晰、单人的正面照片。</p></div>
+      <div id="cameraPane" role="tabpanel" aria-labelledby="sourceCamera" hidden><div class="row"><button id="openCamera" class="secondary">打开摄像头</button><button id="shutter" class="secondary" disabled>拍照</button></div><p class="small">拍照后可先查看照片，再点击生成。切换到上传或完成拍照会关闭摄像头。</p></div>
+      <p id="sourceLabel" class="small source-label">尚未选择照片</p>
     </section>
-    <div class="below">
-      <section class="editor">
-        <div id="chips" class="chips"></div>
-        <details>
-          <summary>编辑提示词</summary>
-          <textarea id="prompt" aria-label="提示词"></textarea>
-          <input id="styleName" type="text" maxlength="24" autocomplete="off" aria-label="名称" placeholder="名称">
-          <div class="save-row">
-            <button id="saveStyle" type="button">保存</button>
-            <button id="updateStyle" type="button" disabled>更新</button>
-            <button id="deleteStyle" type="button" disabled>删除</button>
-          </div>
-        </details>
-      </section>
-      <section class="editor">
-        <h2>本次记录</h2>
-        <div id="history" class="strip"></div>
-        <p id="historyEmpty">还没有</p>
-      </section>
-    </div>
-  </main>
-  <script src="./library.js"></script>
-  <script src="./app.js"></script>
+    <section class="card result-card">
+      <div class="section-head"><h2><span class="step">03</span>查看新形象</h2><button id="download" class="subtle" disabled>下载这张图 ↗</button></div>
+      <div class="result"><img id="result" alt="AI 生成的人物形象" hidden><div id="resultEmpty" class="placeholder"><span class="result-mark" aria-hidden="true">✦</span><strong>你的新形象会出现在这里</strong><span>同一张照片可以尝试不同风格</span></div><div id="generating" class="generating" hidden><span class="spinner"></span><strong>正在绘制你的形象</strong><span>请稍候，完成后会自动显示</span></div></div>
+      <div class="result-footer"><span id="resultStyle" class="small">生成后可保存到本地</span><span id="resultSource" class="small"></span></div>
+    </section>
+  </div>
+  <section class="card style-card">
+    <div class="section-head"><h2><span class="step">02</span>挑一种画风 <span id="styleCount" class="count"></span></h2><span id="selectedStyle" class="selected-style"></span></div>
+    <div id="categories" class="categories" role="group" aria-label="风格分类"></div>
+    <div id="chips" class="chips" role="group" aria-label="内置及自定义风格"></div><p id="noStyles" class="small" hidden>这个分类还没有风格，可在下方保存自己的提示词。</p>
+    <div class="generation-bar"><div><label class="tick"><input id="portraitMode" type="checkbox" checked><span>角色立绘构图</span></label><p class="small">正面、睁眼、闭嘴与纯色背景，便于后续制作动画；取消后按所选画风自由构图。</p></div><button id="generate" class="primary" disabled>生成形象 <span aria-hidden="true">→</span></button></div>
+    <p id="status" class="status" role="status" aria-live="polite">先选择一张照片，再挑选画风。</p><p class="small privacy">只有点击生成时，所选照片和提示词才会发送给已配置的生图服务。</p>
+  </section>
+  <div class="below">
+    <section class="card"><details><summary>调整提示词与保存自定义风格</summary><label for="prompt" class="small">风格描述</label><textarea id="prompt" maxlength="4000" aria-label="风格提示词"></textarea><p class="small">生成时会补充人物特征保持要求；勾选立绘构图时会同时补充构图要求。</p><label for="styleName" class="small">自定义风格名称</label><input id="styleName" type="text" maxlength="24" autocomplete="off" placeholder="为这套画风起个名字"><div class="row"><button id="saveStyle" class="secondary">保存为新风格</button><button id="updateStyle" class="subtle" disabled>更新</button><button id="deleteStyle" class="subtle" disabled>删除</button></div></details><details><summary>生图服务配置</summary><p class="small">在启动 Python 服务的终端设置 DASHSCOPE_API_KEY 后重启服务。模型可通过 DASHSCOPE_IMAGE_MODEL 设置。</p><button id="refreshKey" class="subtle">重新检查配置</button></details></section>
+    <section class="card"><div class="section-head"><h2>最近生成</h2><button id="clearHistory" class="subtle" disabled>清空记录</button></div><p class="small">最多保留最近 30 张，存储在此浏览器中。点击记录可恢复原照片与提示词。</p><div id="history" class="strip"></div><p id="historyEmpty" class="small">生成的形象会保存在这里。</p></section>
+  </div>
+  <footer>当前页面生成静态图片。可动角色制作与实时面捕在后续步骤中进行；这里的风格名称描述绘画效果，不代表独立训练的模型。</footer>
+</main>
+<script src="./library.js"></script><script src="./app.js"></script>
 </body>
 </html>

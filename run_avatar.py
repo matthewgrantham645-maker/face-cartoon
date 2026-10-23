@@ -192,16 +192,23 @@ def result_png(url):
         raise
     except (urllib.error.URLError, TimeoutError, OSError):
         raise RuntimeError("生成图已返回，但下载失败。请再生成一次。") from None
-    if not data.startswith(b"\x89PNG\r\n\x1a\n") or not 24 <= len(data) <= MAX_RESULT:
-        raise RuntimeError("生成图不是可用的 PNG。")
-    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+    kind = None
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        kind = "png"
+    elif data.startswith(b"\xff\xd8\xff"):
+        kind = "jpeg"
+    elif data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        kind = "webp"
+    if not kind or not 24 <= len(data) <= MAX_RESULT:
+        raise RuntimeError("生成图不是可用的 PNG、JPEG 或 WebP。")
+    return "data:image/%s;base64," % kind + base64.b64encode(data).decode("ascii")
 
 
 def generate_selfie(image, prompt, model=None):
     """Send one frame and the prompt box text. The key stays in this process."""
     key = os.environ.get("DASHSCOPE_API_KEY", "").strip()
     if not key:
-        raise RuntimeError("尚未配置千问 API 密钥。")
+        raise RuntimeError("尚未配置千问 API 密钥 DASHSCOPE_API_KEY。")
     model = model or image_model()
     if model not in IMAGE_MODELS:
         raise ValueError("DASHSCOPE_IMAGE_MODEL 只能是 qwen-image-2.1-turbo、qwen-image-3.0 或 qwen-image-3.0-pro。")
@@ -333,7 +340,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.reply(code, {"error": message})
             return
         if not os.environ.get("DASHSCOPE_API_KEY", "").strip():
-            self.reply(503, {"error": "尚未配置千问 API 密钥。"})
+            self.reply(503, {"error": "尚未配置千问 API 密钥 DASHSCOPE_API_KEY。"})
             return
         self.reply(200, {"image": generate_selfie(image, prompt, model)})
 
@@ -356,3 +363,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

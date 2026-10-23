@@ -28,6 +28,16 @@ def provider_payload(url=REMOTE, echo=False):
 
 
 class SelfieServerTests(unittest.TestCase):
+    def test_download_detects_image_format_and_rejects_invalid_output(self):
+        for raw, mime in ((PNG, "png"), (b"\xff\xd8\xff" + b"0" * 30, "jpeg"),
+                          (b"RIFF0000WEBP" + b"0" * 30, "webp")):
+            with self.subTest(mime=mime), patch.object(app.urllib.request, "urlopen", return_value=io.BytesIO(raw)):
+                self.assertTrue(app.result_png(REMOTE).startswith("data:image/%s;base64," % mime))
+        for raw in (b"<html>unexpected response</html>", PNG[:12], PNG + b"0" * app.MAX_RESULT):
+            with patch.object(app.urllib.request, "urlopen", return_value=io.BytesIO(raw)):
+                with self.assertRaises(RuntimeError):
+                    app.result_png(REMOTE)
+
     def test_prompt_model_and_result_host_are_bounded(self):
         self.assertEqual(app.validate_prompt("  蜡笔  "), "蜡笔")
         for value in ("", "   ", None, 3, "x" * 4001):
@@ -135,3 +145,4 @@ class SelfieServerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
