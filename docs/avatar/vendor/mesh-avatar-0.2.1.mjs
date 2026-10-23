@@ -1,3 +1,5 @@
+// Locally patched for portrait-v10: stationary background weights, visible lids,
+// original lip textures and tooth-free mouth. See README-mesh-avatar.md.
 /*! fflate
 MIT License
 
@@ -148,6 +150,7 @@ function Gt(n, e = {}) {
   const t = [];
   if (pn(e.draft ?? !1)(n, "rig", t), t.length) return t;
   const r = n;
+  if (r.portrait !== undefined && (!r.portrait || r.portrait.version !== 2 || r.portrait.teeth !== false)) t.push("rig.portrait: expected version 2 with teeth=false");
   r.eyes.forEach((a, s) => {
     const l = ["x0", "x1", "top", "bot"];
     if (!(e.draft && l.every((m) => a[m] === void 0))) {
@@ -200,8 +203,8 @@ function dn(n) {
   }
   function l(g, A, E, k) {
     A = Math.min(1, Math.max(0, A));
-    const N = s(g.top, A), z = s(g.bot, A), F = 1 - E, j = 4 * A * (1 - A), M = s(g.bot, 0.5) - s(g.top, 0.5), R = g.top[0] + (g.top[r - 1] - g.top[0]) * A - 0.3 * M * j, W = Math.max(N, z + 1 + (R - z - 1) * k);
-    return [(W - N) * Math.max(F, -0.07), F > 0 ? (W - z) * F * k : 0];
+    const N = s(g.top, A), z = s(g.bot, A), F = 1 - E, j = 4 * A * (1 - A), M = s(g.bot, 0.5) - s(g.top, 0.5), R = g.top[0] + (g.top[r - 1] - g.top[0]) * A - 0.3 * M * j, W = n.portrait?.version === 2 ? Math.max(N, g.top[0] + (g.top[r - 1] - g.top[0]) * A + M * (0.10 - 0.25 * k) * j) : Math.max(N, z + 1 + (R - z - 1) * k);
+    return [(W - N) * Math.max(F, -0.07), F > 0 ? (W - z) * F * (n.portrait?.version === 2 ? 1 : k) : 0];
   }
   const m = [[-2, 1], [-1, 2], [0, 3], [1, 2], [2, 1]], b = 5;
   function d(g, A, E, k) {
@@ -308,7 +311,7 @@ function dn(n) {
     }
     F[1] += k.mouthOpen * 3.5 * E.jaw;
     const M = k.angleX / 30, R = k.angleY / 30;
-    return F[0] += M * (8 * E.nose + 5 * E.mouth) + (g - n.face.eyeA.cx) * 0.12 * M * E.eyeA - (g - n.face.eyeB.cx) * 0.12 * M * E.eyeB - M * 9 * E.earR + M * 4 * E.earL - M * 10 * (E.bunL + E.bunR), F[1] -= R * (6 * E.nose + 3 * E.mouth), F[1] += (A - n.face.eyeA.cy) * -0.06 * Math.abs(R) * E.eyeA + (A - n.face.eyeB.cy) * -0.06 * Math.abs(R) * E.eyeB, I(F, E.head, k, E.turn), _(F, A, k, E.chest, E.breath, E.shoulder), F;
+    return F[0] += M * (8 * E.nose + 5 * E.mouth) + (g - n.face.eyeA.cx) * 0.12 * M * E.eyeA - (g - n.face.eyeB.cx) * 0.12 * M * E.eyeB - M * 9 * E.earR + M * 4 * E.earL - M * 10 * (E.bunL + E.bunR), F[1] -= R * (6 * E.nose + 3 * E.mouth), F[1] += (A - n.face.eyeA.cy) * -0.06 * Math.abs(R) * E.eyeA + (A - n.face.eyeB.cy) * -0.06 * Math.abs(R) * E.eyeB, I(F, E.head, k, E.turn), _(F, A, k, E.chest, E.breath, E.shoulder), F[0] = g + (F[0] - g) * (E.portrait ?? 1), F[1] = A + (F[1] - A) * (E.portrait ?? 1), F;
   }
   const O = n.hand, C = O?.elbow ?? [0, 0], $ = O?.wrist ?? [0, 0], V = O?.knuckle ?? [0, 0], X = O?.contact ?? [0, 0], D = O?.forearmShare ?? 0;
   function H(g, A) {
@@ -584,8 +587,8 @@ function Ln(n, e) {
     float b = 1.0 - st.x, smile = st.y, hump = 4.0 * u * (1.0 - u);
     float H = crv(e, false, 0.5) - crv(e, true, 0.5);
     float arc = mix(uEyeTop[e * EYE_N], uEyeTop[e * EYE_N + EYE_N - 1], u) - 0.3 * H * hump;
-    float closed = max(top, bot + 1.0 + (arc - bot - 1.0) * smile);
-    return vec2((closed - top) * max(b, -0.07), b > 0.0 ? (closed - bot) * b * smile : 0.0);
+    float closed = ${e.portrait?.version === 2 ? "max(top, mix(uEyeTop[e * EYE_N], uEyeTop[e * EYE_N + EYE_N - 1], u) + H * (0.10 - 0.25 * smile) * hump)" : "max(top, bot + 1.0 + (arc - bot - 1.0) * smile)"};
+    return vec2((closed - top) * max(b, -0.07), b > 0.0 ? (closed - bot) * b * ${e.portrait?.version === 2 ? "1.0" : "smile"} : 0.0);
   }
 
   vec2 eyeLids(int e, float u, float top, float bot) {
@@ -616,27 +619,27 @@ function Ln(n, e) {
   }
 
   vec4 mouth(vec2 p, vec4 base) {
-    float open = uMouthState.x;
+    float open = ${e.portrait?.version === 2 ? "clamp(uMouthState.x, 0.0, 1.0)" : "uMouthState.x"};
     if (open < 0.01) return base;
     vec2 d = vec2(cos(uMouth.z), sin(uMouth.z)), n = vec2(-d.y, d.x);
     vec2 r = p - uMouth.xy;
     float s = dot(r, d) / uMouth.w, t = dot(r, n);
     float form = uMouthState.y;                       // -1 wide "i" .. +1 round "o"
-    float wf = mix(0.78, 0.46, clamp(form * 0.5 + 0.5, 0.0, 1.0));
+    float wf = ${e.portrait?.version === 2 ? "mix(0.94, 0.86, clamp(form * 0.5 + 0.5, 0.0, 1.0))" : "mix(0.78, 0.46, clamp(form * 0.5 + 0.5, 0.0, 1.0))"};
     float k = 1.0 - (s / wf) * (s / wf);
     if (k <= 0.0) return base;
     float line = uMouthState.z * (1.0 - s * s);
-    float hk = pow(k, mix(0.55, 0.85, clamp(form, 0.0, 1.0)));
-    float H = mix(20.0, 26.0, clamp(form, 0.0, 1.0));
-    float up = line - 0.6 - open * 2.5 * hk;
-    float lo = line + open * H * hk;
+    float hk = ${e.portrait?.version === 2 ? "sqrt(k)" : "pow(k, mix(0.55, 0.85, clamp(form, 0.0, 1.0)))"};
+    float H = ${e.portrait?.version === 2 ? "uMouth.w * 0.24" : "mix(20.0, 26.0, clamp(form, 0.0, 1.0))"};
+    float up = line - 0.6 - open * ${e.portrait?.version === 2 ? "H * 0.25" : "2.5"} * hk;
+    float lo = line + open * H * ${e.portrait?.version === 2 ? "0.75" : "1.0"} * hk;
     float cov = smoothstep(-0.7, 0.7, t - up) * smoothstep(-0.7, 0.7, lo - t);
     if (cov <= 0.0) return base;
     float tv = clamp((t - up) / max(lo - up, 1.0), 0.0, 1.0);
     vec3 col = mix(vec3(0.24, 0.05, 0.08), vec3(0.48, 0.15, 0.19), tv);
     float tongue = smoothstep(0.5, 0.78, tv) * (1.0 - smoothstep(0.45, 0.8, abs(s) / wf));
-    col = mix(col, vec3(0.86, 0.44, 0.47), tongue * 0.9);
-    float teeth = (1.0 - smoothstep(0.12, 0.22, tv)) * smoothstep(0.25, 0.45, open) * (1.0 - smoothstep(0.55, 0.85, abs(s) / wf));
+    col = mix(col, vec3(0.86, 0.44, 0.47), tongue * ${e.portrait?.version === 2 ? "0.25" : "0.9"});
+    float teeth = ${e.portrait?.version === 2 ? "0.0" : "1.0"} * (1.0 - smoothstep(0.12, 0.22, tv)) * smoothstep(0.25, 0.45, open) * (1.0 - smoothstep(0.55, 0.85, abs(s) / wf));
     col = mix(col, vec3(0.99, 0.96, 0.94), teeth);
     float rim = 1.0 - smoothstep(0.6, 1.8, lo - t);
     col = mix(col, vec3(0.36, 0.09, 0.11), rim * 0.85);
@@ -795,7 +798,7 @@ function Ln(n, e) {
         const T = xn(h.image, h.mesh.rect, e, !/^(eye|mouth)/.test(h.name));
         this.lightingStats.normalMs += T.ms, this.lightingStats[T.computed ? "computedLayers" : "cachedLayers"]++, h.normal = o.createTexture(), o.activeTexture(o.TEXTURE0), o.bindTexture(o.TEXTURE_2D, h.normal), o.pixelStorei(o.UNPACK_PREMULTIPLY_ALPHA_WEBGL, !1), o.texImage2D(o.TEXTURE_2D, 0, o.RGBA, T.width, T.height, 0, o.RGBA, o.UNSIGNED_BYTE, T.data), o.generateMipmap(o.TEXTURE_2D), o.texParameteri(o.TEXTURE_2D, o.TEXTURE_MIN_FILTER, o.LINEAR_MIPMAP_LINEAR), o.texParameteri(o.TEXTURE_2D, o.TEXTURE_MAG_FILTER, o.LINEAR), o.texParameteri(o.TEXTURE_2D, o.TEXTURE_WRAP_S, o.CLAMP_TO_EDGE), o.texParameteri(o.TEXTURE_2D, o.TEXTURE_WRAP_T, o.CLAMP_TO_EDGE);
         const f = new Float32Array(h.mesh.rest.length / 2);
-        for (let w = 0; w < f.length; w++) f[w] = n.headWeight(h.mesh.rest[w * 2], h.mesh.rest[w * 2 + 1]);
+        for (let w = 0; w < f.length; w++) f[w] = n.headWeight(h.mesh.rest[w * 2], h.mesh.rest[w * 2 + 1]) * (n.portraitWeight?.(h.mesh.rest[w * 2], h.mesh.rest[w * 2 + 1]) ?? 1);
         h.headBuf = o.createBuffer(), o.bindVertexArray(h.vao), o.bindBuffer(o.ARRAY_BUFFER, h.headBuf), o.bufferData(o.ARRAY_BUFFER, f, o.STATIC_DRAW), o.enableVertexAttribArray(2), o.vertexAttribPointer(2, 1, o.FLOAT, !1, 0, 0);
       }
       o.bindVertexArray(null), this.lighting.shadow && !this.shadow && (this.shadow = new Rn(o, u));
@@ -1828,10 +1831,14 @@ async function Jn(n, e) {
       return e.assets[M];
     }
     return `${o}${M}${R === void 0 ? "" : `?b=${R}`}`;
-  }, T = await Ct(h("layers.json")), f = ["base", ...t.hand ? ["hand"] : [], ...S.map((M) => M.name), ...[0, 1].flatMap((M) => jt.map((R) => `eye${M}_${R}`)), "hairmask"], w = Object.fromEntries(await Promise.all(f.map(async (M) => [M, await zt(h(`${M}.png`, T.build))]))), B = Jt(w.hairmask, 0), Y = (M, R) => B[Math.min(a.h - 1, Math.max(0, Math.round(R))) * a.w + Math.min(a.w - 1, Math.max(0, Math.round(M)))] / 255, I = new y(n, { padTop: e.padTop ?? t.view.padTop, padSide: e.padSide ?? t.view.padSide, fit: e.fit }), _ = { base: [0, 0, a.w, a.h], ...T.layers }, U = c(_.base, t.mesh.baseCell, Ue(w.base), w.base.width, t.mesh.fine), O = [];
+  }, T = await Ct(h("layers.json")), f = ["base", ...t.hand ? ["hand"] : [], ...S.map((M) => M.name), ...[0, 1].flatMap((M) => jt.map((R) => `eye${M}_${R}`)), "hairmask", ...t.portrait?.version === 2 ? ["subject", "mouth_upper", "mouth_lower"] : []], w = Object.fromEntries(await Promise.all(f.map(async (M) => [M, await zt(h(`${M}.png`, T.build))]))), B = Jt(w.hairmask, 0), Y = (M, R) => B[Math.min(a.h - 1, Math.max(0, Math.round(R))) * a.w + Math.min(a.w - 1, Math.max(0, Math.round(M)))] / 255, I = new y(n, { padTop: e.padTop ?? t.view.padTop, padSide: e.padSide ?? t.view.padSide, fit: e.fit }), _ = { base: [0, 0, a.w, a.h], ...T.layers }, U = c(_.base, t.mesh.baseCell, Ue(w.base), w.base.width, t.mesh.fine), O = [];
+  // Local portrait extension: background and image edges have zero motion weight.
+  if (w.subject && (w.subject.width !== a.w || w.subject.height !== a.h)) throw new Error("subject.png: dimensions must match rig image");
+  const subject = w.subject ? Jt(w.subject, 0) : null;
+  r.portraitWeight = (px, py) => !subject ? 1 : subject[Math.min(a.h - 1, Math.max(0, Math.round(py))) * a.w + Math.min(a.w - 1, Math.max(0, Math.round(px)))] / 255;
   for (let M = 0; M < U.rest.length / 2; M++) {
     const R = U.rest[M * 2], W = U.rest[M * 2 + 1];
-    O.push(l(R, W, Y(R, W)));
+    O.push({ ...l(R, W, Y(R, W)), portrait: r.portraitWeight(R, W) });
   }
   I.addLayer("base", w.base, U, { face: !0 });
   const C = [];
@@ -1840,12 +1847,17 @@ async function Jn(n, e) {
       const Q = `eye${R}_${W}`, ne = c(_[Q], W === "ball" ? t.mesh.eyeBallCell : t.mesh.eyeCell, Ue(w[Q]), w[Q].width), ee = [];
       for (let oe = 0; oe < ne.rest.length / 2; oe++) ee.push(l(ne.rest[oe * 2], ne.rest[oe * 2 + 1], 0));
       const he = I.addLayer(Q, w[Q], ne, { eyeBall: W === "ball" ? R : void 0 });
-      C.push({ e: M, eye: R, part: W, mesh: ne, W: ee, layer: he });
+      const closedLid = t.portrait?.blinkLid === true && W === "crease";
+      C.push({ e: M, eye: R, part: closedLid ? "lash" : W, closedLid, mesh: ne, W: ee, layer: he });
     }
   });
+  const portraitLips = t.portrait?.version === 2 ? ["upper", "lower"].map(part => {
+    const key = `mouth_${part}`, mesh = c(_[key], t.mesh.eyeCell, Ue(w[key]), w[key].width);
+    return { part, mesh, W: Array.from({length: mesh.rest.length / 2}, (_, i) => l(mesh.rest[i * 2], mesh.rest[i * 2 + 1], 0)), layer: I.addLayer(key, w[key], mesh) };
+  }) : [];
   let $ = null;
   try {
-    {
+    if (t.portrait?.version !== 2) {
       const M = await Ct(h("sprites/sprites.json")), R = Object.fromEntries(await Promise.all(Object.keys(M.layers).map(async (W) => [W, await zt(h(`sprites/${W}.png`, M.build))])));
       $ = x(I, M, R, c, Ue);
     }
@@ -1875,15 +1887,30 @@ async function Jn(n, e) {
     const R = A(M), W = H.step(R, M), Q = U.pos, ne = U.rest;
     for (let K = 0; K < O.length; K++)
       m(ne[K * 2], ne[K * 2 + 1], O[K], R, W, g), Q[K * 2] = g[0], Q[K * 2 + 1] = g[1];
-    const ee = (K) => $ ? 1 : K;
+    const ee = (K) => $ && t.portrait?.version !== 2 ? 1 : K;
     for (const K of C) {
       const Pe = ee(K.eye === 0 ? R.eyeROpen : R.eyeLOpen), Tt = K.eye === 0 ? R.eyeSmile : R.eyeSmileL ?? R.eyeSmile;
-      K.layer.alpha = d(K.part, Pe, Tt);
+      const closure = Math.min(1, Math.max(0, (0.55 - Pe) / 0.40));
+      K.layer.alpha = K.closedLid ? closure * closure * (3 - 2 * closure) : d(K.part, Pe, Tt);
       const Ot = K.mesh.rest, Rt = K.mesh.pos;
       for (let Se = 0; Se < K.W.length; Se++) {
         const Lt = Ot[Se * 2], mn = Ot[Se * 2 + 1];
         m(Lt, b(K.e, K.part, Lt, mn, Pe, Tt), K.W[Se], R, W, g), Rt[Se * 2] = g[0], Rt[Se * 2 + 1] = g[1];
       }
+    }
+    // Move original lip textures around a continuous, tooth-free aperture.
+    for (const lip of portraitLips) for (let i = 0; i < lip.W.length; i++) {
+      const px = lip.mesh.rest[i * 2], py = lip.mesh.rest[i * 2 + 1];
+      // Match shader coordinates, width and rounded profile exactly, including tilted mouths.
+      const ca = Math.cos(t.mouth.angle), sa = Math.sin(t.mouth.angle);
+      const nx = ((px - t.mouth.cx) * ca + (py - t.mouth.cy) * sa) / t.mouth.halfLen;
+      const form = Math.min(1, Math.max(0, R.mouthForm * 0.5 + 0.5));
+      const width = 0.94 + (0.86 - 0.94) * form;
+      const k = Math.max(0, 1 - (nx / width) ** 2);
+      const H = t.mouth.halfLen * 0.24;
+      const shift = Math.min(1, Math.max(0, R.mouthOpen)) * H * (lip.part === "upper" ? -0.25 : 0.75) * Math.sqrt(k);
+      m(px - sa * shift, py + ca * shift, lip.W[i], R, W, g);
+      lip.mesh.pos[i * 2] = g[0]; lip.mesh.pos[i * 2 + 1] = g[1];
     }
     const he = $?.update(R, W, M, Fn(q.name, L.mode === "manual" ? null : L.expr));
     if (he) for (const K of C) he.eyes[K.eye] && (K.layer.alpha = 0);
@@ -2108,6 +2135,7 @@ function Qt(n) {
       const y = [
         ...d.eyes.flatMap((c, v) => ["ball", "low", "crease", "lash"].map((x) => `eye${v}_${x}`)),
         ...d.hand ? ["hand"] : [],
+        ...d.portrait?.version === 2 ? ["subject", "mouth_upper", "mouth_lower"] : [],
         ...(d.accessories ?? []).map((c) => c.name)
       ];
       for (const c of y) at(S, c) || e.push(`built/layers.json.layers.${c}: missing required layer`);

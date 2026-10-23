@@ -60,15 +60,31 @@
         script.onload=()=>{clearTimeout(timeout);resolve();};script.onerror=()=>{clearTimeout(timeout);script.remove();reject(Error('跟踪组件下载失败；手动与演示模式仍可使用。'));};document.head.appendChild(script);
       });
       if(!window.Kalidokit?.Face)throw Error('KalidoKit 未加载，请重新更新仓库。');
-      tracker=new FaceMesh({locateFile:file=>mediaRoot+file});tracker.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});tracker.onResults(receive);
+      tracker=new FaceMesh({locateFile:file=>mediaRoot+file});const instance=tracker;tracker.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});tracker.onResults(results=>{if(tracker===instance)receive(results);});
     })();
     try{await loadPromise;}catch(error){tracker=null;throw error;}finally{loadPromise=null;}
   }
   async function send(image,kind){purpose=kind;frameResult=null;const start=performance.now();await tracker.send({image});if(kind==='live')inferenceMS=inferenceMS?inferenceMS*.85+(performance.now()-start)*.15:performance.now()-start;return frameResult?frameResult.map(p=>({...p})):null;}
+  // Reuse the same detector, serializing still-image work with camera frames.
+  // No camera permission or external image-generation request is involved.
+  window.AvatarPortraitDetector={detect:async image=>{
+    if(generating||starting)throw Error('面捕组件正在准备，请稍后重试定位。');
+    generating=true;let timer,instance;
+    try{
+      await loadTracker();if(pendingFrame)await pendingFrame;instance=tracker;
+      await instance.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.3,minTrackingConfidence:.3});
+      return await Promise.race([send(image,'portrait'),new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(Error('五官定位超时，请重试或使用三点快速标定。')),15000);})]);
+    }catch(error){
+      if(instance&&tracker===instance){tracker=null;Promise.resolve(instance.close?.()).catch(()=>{});}throw error;
+    }finally{
+      clearTimeout(timer);if(instance&&tracker===instance){try{await instance.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});}catch{tracker=null;}}
+      purpose='live';generating=false;lastFace=performance.now();
+    }
+  }};
   function updateEngine(){ const art=window.IllustratedAvatar?.active?'二维插画网格':'参数曲线';$('engine').textContent=mode==='camera'&&stream?art+' · 面捕':art+(mode==='demo'?' · 自动演示':' · 手动'); }
   window.addEventListener('avatar-renderer-change',updateEngine);
   async function startCamera(){
-    if(starting||generating)return;if(stream){setMode('camera');calibrate();updateEngine();return;}
+    if(starting)return;if(generating){say('正在定位图片或准备照片，请稍候再开启面捕。');return;}if(stream){setMode('camera');calibrate();updateEngine();return;}
     starting=true;$('camera').disabled=true;const token=++epoch;say('正在加载面捕组件并请求摄像头…');
     try{
       await loadTracker();if(token!==epoch)return;
@@ -160,3 +176,4 @@
   }).catch(()=>{$('apiStatus').textContent='当前是纯静态服务。运行 python run_avatar.py 后可配置 DeepSeek；本地生成和动画仍可用。';});
   syncLook();profileControls();requestAnimationFrame(tick);
 })();
+

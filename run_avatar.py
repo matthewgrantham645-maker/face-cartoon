@@ -26,7 +26,7 @@ MAX_PROMPT = 4000
 MAX_STYLE_NAME = 24
 MAX_STYLES = 80
 STYLES_PATH = ROOT / "data" / "selfie-styles.json"
-BUILTIN_STYLE_IDS = {"crayon-journal", "ghibli", "simpsons", "pixar", "disney", "dragon-ball", "shin-chan", "conan", "snoopy", "clay", "lego", "pixel", "low-poly", "y2k", "ins-minimal", "ukiyo-e", "southeast-asia", "oil-paint", "hand-drawn", "sketch", "watercolor"}
+BUILTIN_STYLE_IDS = {"crayon-journal", "cel-avatar", "clear-anime", "felt-doll", "ghibli", "simpsons", "pixar", "disney", "dragon-ball", "crayon-shinchan", "detective-anime", "peanuts", "clay-stopmotion", "building-blocks", "pixel-portrait", "low-poly", "y2k", "minimal", "ukiyo-e", "southeast-asian", "oil-painting", "hand-drawn", "pencil-sketch", "watercolor"}
 STYLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
 MAX_RESULT = 20 * 1024 * 1024
 NUMBERS = {"hairVolume": (.8, 1.4), "faceWidth": (.82, 1.2), "jawWidth": (.75, 1.18),
@@ -290,7 +290,7 @@ def generate_selfie(image, prompt, model=None):
     """Send one frame and the prompt box text. The key stays in this process."""
     key = os.environ.get("DASHSCOPE_API_KEY", "").strip()
     if not key:
-        raise RuntimeError("尚未配置千问 API 密钥。")
+        raise RuntimeError("尚未配置千问 API 密钥 DASHSCOPE_API_KEY。")
     model = model or image_model()
     if model not in IMAGE_MODELS:
         raise ValueError("DASHSCOPE_IMAGE_MODEL 只能是 qwen-image-2.1-turbo、qwen-image-3.0 或 qwen-image-3.0-pro。")
@@ -330,6 +330,13 @@ class Handler(SimpleHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT / "docs"), **kwargs)
+
+    def end_headers(self):
+        # Local updates must revalidate HTML and modules as one application.
+        # Otherwise the new binding UI can reuse an old renderer without load().
+        if self.command in ("GET", "HEAD") and not urlparse(self.path).path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
 
     def allowed_origin(self):
         expected = "127.0.0.1:%s" % self.server.server_address[1]
@@ -443,7 +450,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.reply(code, {"error": message})
             return
         if not os.environ.get("DASHSCOPE_API_KEY", "").strip():
-            self.reply(503, {"error": "尚未配置千问 API 密钥。"})
+            self.reply(503, {"error": "尚未配置千问 API 密钥 DASHSCOPE_API_KEY。"})
             return
         self.reply(200, {"image": generate_selfie(image, prompt, model)})
 
@@ -466,3 +473,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
