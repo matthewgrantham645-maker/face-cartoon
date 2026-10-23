@@ -67,7 +67,7 @@ const fixture='data:image/png;base64,'+fs.readFileSync(path.join(root,'docs/avat
     await page.waitForFunction(()=>!PortraitDiagnostics.snapshot().building);const saved=await page.evaluate(()=>PortraitDiagnostics.snapshot().applied.mouth.x);
     const downloadPromise=page.waitForEvent('download');await page.locator('#exportPortrait').click();const download=await downloadPromise;const archivePath=path.join(out,'portrait.mavatar');await download.saveAs(archivePath);
     const V=await import('../docs/avatar/vendor/mesh-avatar-0.2.1.mjs'),files=V.unpackAvatar(new Uint8Array(fs.readFileSync(archivePath)));assert.deepEqual(V.validateAvatarFiles(files),[]);assert.ok(files['source.png'].length>10000);
-    await page.reload();await page.waitForFunction(()=>PortraitDiagnostics.snapshot().binding);
+    await page.reload();await page.waitForFunction(()=>PortraitDiagnostics.snapshot().binding&&!PortraitDiagnostics.snapshot().building&&IllustratedAvatar.portrait);
     assert.equal(await page.evaluate(()=>PortraitDiagnostics.snapshot().binding.mouth.x),saved);assert.equal(await page.evaluate(()=>window.cameraCalls),0);
     await page.locator('#cancelPortrait').click();await page.locator('#importAvatar').setInputFiles({name:'roundtrip.mavatar',mimeType:'application/zip',buffer:fs.readFileSync(archivePath)});
     await page.waitForFunction(()=>IllustratedAvatar.name==='roundtrip'&&!IllustratedAvatar.loading);

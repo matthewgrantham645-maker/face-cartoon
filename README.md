@@ -1,3 +1,19 @@
+# AI-FacialLab · 照片生成卡通形象与实时面捕
+
+本分支提供上传照片或拍照、24 种生图风格、图库与单图角色绑定，并用摄像头驱动同一个角色的眨眼、说话与小幅转头。基于 KalidoKit 和 Mesh Avatar Studio；单图绑定不是 Cubism 模型生成。
+
+```powershell
+python run_avatar.py
+```
+
+打开 http://localhost:8000/home/ 。正常启动不需要安装 Python 依赖；生图需要在本机配置千问密钥。第十一版支持表情预览、独立口型与眼神幅度、放大校正、撤销、刷新恢复及转头网格保护。
+
+- [使用与更新说明](docs/avatar/README.md)
+- [第十一版测试记录](docs/avatar/v11-validation.md)
+- [实际渲染演示](docs/avatar/portrait-v11-preview.webm)
+
+以下保留 KalidoKit 的上游介绍和许可信息。
+
 <img src="https://github.com/yeemachine/kalidokit/blob/main/docs/kalidokit-logo.png?raw=true" alt="Kalidokit Template" width="200ps" style="margin-bottom:10px"/>
 
 [![NPM Package][npm]][npm-url]

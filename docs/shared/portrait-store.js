@@ -18,6 +18,12 @@
       tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('保存图片失败。'));
     });}finally{db.close();}
   }
-  async function saveBinding(id,binding){const shot=await get(id);if(!shot)return false;await put({...shot,portraitBinding:binding});return true;}
+  async function saveBinding(id,binding){
+    const db=await open();try{return await new Promise((resolve,reject)=>{
+      let found=false;const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),request=store.get(id);
+      request.onsuccess=()=>{const shot=request.result;if(shot&&validImage(shot.result)){store.put({...shot,portraitBinding:binding});found=true;}};
+      tx.oncomplete=()=>resolve(found);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('保存绑定失败。'));
+    });}finally{db.close();}
+  }
   root.PortraitStore={list,get,put,saveBinding,validImage};
 })(typeof window!=='undefined'?window:globalThis);

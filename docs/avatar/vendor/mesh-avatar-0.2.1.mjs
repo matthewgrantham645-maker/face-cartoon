@@ -1,5 +1,5 @@
-// Locally patched for portrait-v10: stationary background weights, visible lids,
-// original lip textures and tooth-free mouth. See README-mesh-avatar.md.
+// Locally patched for portrait-v11: pinned backgrounds, blink-only lids,
+// original tooth-free lips and non-folding deformation. See README-mesh-avatar.md.
 /*! fflate
 MIT License
 
@@ -311,7 +311,7 @@ function dn(n) {
     }
     F[1] += k.mouthOpen * 3.5 * E.jaw;
     const M = k.angleX / 30, R = k.angleY / 30;
-    return F[0] += M * (8 * E.nose + 5 * E.mouth) + (g - n.face.eyeA.cx) * 0.12 * M * E.eyeA - (g - n.face.eyeB.cx) * 0.12 * M * E.eyeB - M * 9 * E.earR + M * 4 * E.earL - M * 10 * (E.bunL + E.bunR), F[1] -= R * (6 * E.nose + 3 * E.mouth), F[1] += (A - n.face.eyeA.cy) * -0.06 * Math.abs(R) * E.eyeA + (A - n.face.eyeB.cy) * -0.06 * Math.abs(R) * E.eyeB, I(F, E.head, k, E.turn), _(F, A, k, E.chest, E.breath, E.shoulder), F[0] = g + (F[0] - g) * (E.portrait ?? 1), F[1] = A + (F[1] - A) * (E.portrait ?? 1), F;
+    return F[0] += M * (8 * E.nose + 5 * E.mouth) + (g - n.face.eyeA.cx) * 0.12 * M * E.eyeA - (g - n.face.eyeB.cx) * 0.12 * M * E.eyeB - M * 9 * E.earR + M * 4 * E.earL - M * 10 * (E.bunL + E.bunR), F[1] -= R * (6 * E.nose + 3 * E.mouth), F[1] += (A - n.face.eyeA.cy) * -0.06 * Math.abs(R) * E.eyeA + (A - n.face.eyeB.cy) * -0.06 * Math.abs(R) * E.eyeB, I(F, E.head, k, E.turn), _(F, A, k, E.chest, E.breath, E.shoulder), F[0] = g + (F[0] - g) * (E.portrait ?? 1) * (k.deformGain ?? 1), F[1] = A + (F[1] - A) * (E.portrait ?? 1) * (k.deformGain ?? 1), F;
   }
   const O = n.hand, C = O?.elbow ?? [0, 0], $ = O?.wrist ?? [0, 0], V = O?.knuckle ?? [0, 0], X = O?.contact ?? [0, 0], D = O?.forearmShare ?? 0;
   function H(g, A) {
@@ -1811,6 +1811,26 @@ function qn(n, e) {
     u[S] = x + (f - x) * B, u[S + 1] = o + (w - o) * B;
   }
 }
+function portraitDeformationGain(mesh, minimum = 0.25) {
+  const rest = mesh.rest, pos = mesh.pos, tris = mesh.tris;let gain = 1;
+  for (let i = 0; i < tris.length; i += 3) {
+    const a = tris[i] * 2, b = tris[i + 1] * 2, c = tris[i + 2] * 2;
+    const bx = rest[b] - rest[a], by = rest[b + 1] - rest[a + 1], cx = rest[c] - rest[a], cy = rest[c + 1] - rest[a + 1];
+    const area = bx * cy - by * cx;if (Math.abs(area) < 1e-6) continue;
+    const dbx = pos[b] - pos[a] - bx, dby = pos[b + 1] - pos[a + 1] - by, dcx = pos[c] - pos[a] - cx, dcy = pos[c + 1] - pos[a + 1] - cy;
+    const linear = (dbx * cy - dby * cx + bx * dcy - by * dcx) / area;
+    const square = (dbx * dcy - dby * dcx) / area, constant = 1 - minimum;
+    if (Math.abs(square) < 1e-10) {
+      if (linear < 0) gain = Math.min(gain, -constant / linear);
+    } else {
+      const discriminant = linear * linear - 4 * square * constant;
+      if (discriminant < 0) continue;
+      const root = Math.sqrt(discriminant), r0 = (-linear - root) / (2 * square), r1 = (-linear + root) / (2 * square);
+      if (r0 > 0) gain = Math.min(gain, r0);if (r1 > 0) gain = Math.min(gain, r1);
+    }
+  }
+  return gain < 1 ? Math.max(0, gain * 0.98) : 1;
+}
 async function Jn(n, e) {
   if (!e.assets && e.assetsBase === void 0)
     throw new Error("createMeshAvatar requires assets or assetsBase.");
@@ -1845,7 +1865,7 @@ async function Jn(n, e) {
   s.forEach((M, R) => {
     for (const W of jt) {
       const Q = `eye${R}_${W}`, ne = c(_[Q], W === "ball" ? t.mesh.eyeBallCell : t.mesh.eyeCell, Ue(w[Q]), w[Q].width), ee = [];
-      for (let oe = 0; oe < ne.rest.length / 2; oe++) ee.push(l(ne.rest[oe * 2], ne.rest[oe * 2 + 1], 0));
+      for (let oe = 0; oe < ne.rest.length / 2; oe++) ee.push({...l(ne.rest[oe * 2], ne.rest[oe * 2 + 1], 0),portrait:r.portraitWeight(ne.rest[oe * 2],ne.rest[oe * 2 + 1])});
       const he = I.addLayer(Q, w[Q], ne, { eyeBall: W === "ball" ? R : void 0 });
       const closedLid = t.portrait?.blinkLid === true && W === "crease";
       C.push({ e: M, eye: R, part: closedLid ? "lash" : W, closedLid, mesh: ne, W: ee, layer: he });
@@ -1853,7 +1873,7 @@ async function Jn(n, e) {
   });
   const portraitLips = t.portrait?.version === 2 ? ["upper", "lower"].map(part => {
     const key = `mouth_${part}`, mesh = c(_[key], t.mesh.eyeCell, Ue(w[key]), w[key].width);
-    return { part, mesh, W: Array.from({length: mesh.rest.length / 2}, (_, i) => l(mesh.rest[i * 2], mesh.rest[i * 2 + 1], 0)), layer: I.addLayer(key, w[key], mesh) };
+    return { part, mesh, W: Array.from({length: mesh.rest.length / 2}, (_, i) => ({...l(mesh.rest[i * 2], mesh.rest[i * 2 + 1], 0),portrait:r.portraitWeight(mesh.rest[i * 2],mesh.rest[i * 2 + 1])})), layer: I.addLayer(key, w[key], mesh) };
   }) : [];
   let $ = null;
   try {
@@ -1885,8 +1905,13 @@ async function Jn(n, e) {
   }
   function E(M) {
     const R = A(M), W = H.step(R, M), Q = U.pos, ne = U.rest;
+    if (t.portrait?.version === 2) R.deformGain = 1;
     for (let K = 0; K < O.length; K++)
       m(ne[K * 2], ne[K * 2 + 1], O[K], R, W, g), Q[K * 2] = g[0], Q[K * 2 + 1] = g[1];
+    if (t.portrait?.version === 2) {
+      R.deformGain = portraitDeformationGain(U);
+      if (R.deformGain < 1) for (let i = 0; i < Q.length; i++) Q[i] = ne[i] + (Q[i] - ne[i]) * R.deformGain;
+    }
     const ee = (K) => $ && t.portrait?.version !== 2 ? 1 : K;
     for (const K of C) {
       const Pe = ee(K.eye === 0 ? R.eyeROpen : R.eyeLOpen), Tt = K.eye === 0 ? R.eyeSmile : R.eyeSmileL ?? R.eyeSmile;
@@ -1957,6 +1982,20 @@ async function Jn(n, e) {
     },
     getParameters() {
       return { ...J };
+    },
+    // On-demand diagnostics only: no triangle scan is added to animation frames.
+    getMeshStats() {
+      const area = (p, a, b, c) => (p[b * 2] - p[a * 2]) * (p[c * 2 + 1] - p[a * 2 + 1]) - (p[b * 2 + 1] - p[a * 2 + 1]) * (p[c * 2] - p[a * 2]);
+      return I.layers.map(layer => {
+        const mesh = layer.mesh;let flipped = 0, minAreaRatio = Infinity, maxAreaRatio = 0;
+        for (let i = 0; i < mesh.tris.length; i += 3) {
+          const a = mesh.tris[i], b = mesh.tris[i + 1], c = mesh.tris[i + 2], rest = area(mesh.rest, a, b, c);
+          if (Math.abs(rest) < 1e-6) continue;
+          const ratio = area(mesh.pos, a, b, c) / rest;
+          if (ratio <= 0) flipped++;minAreaRatio = Math.min(minAreaRatio, ratio);maxAreaRatio = Math.max(maxAreaRatio, ratio);
+        }
+        return {name:layer.name,vertices:mesh.pos.length/2,triangles:mesh.tris.length/3,flipped,minAreaRatio:Number.isFinite(minAreaRatio)?minAreaRatio:1,maxAreaRatio};
+      });
     },
     /** 0..1 loudness of the voice being played (e.g. normalised RMS). */
     setVoiceLevel(M) {
@@ -2957,6 +2996,7 @@ async function Rr(n, e, t = {}) {
   }
 }
 export {
+  portraitDeformationGain,
   Re as DEFAULT_LIGHTING,
   Tr as LIVE_EXPRESSIONS,
   De as PARAMS,

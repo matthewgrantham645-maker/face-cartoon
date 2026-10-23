@@ -1,5 +1,5 @@
 'use strict';
-const assert=require('node:assert/strict'),{MotionDriver,OneEuro,measure}=require('../docs/avatar/tracking.js');
+const assert=require('node:assert/strict'),{MotionDriver,OneEuro,measure,FacePresence}=require('../docs/avatar/tracking.js');
 function fixture(open=1,aperture=.002){
  const p=Array.from({length:478},()=>({x:.5,y:.5,z:0}));
  const set=(i,x,y)=>p[i]={x,y,z:0};
@@ -25,4 +25,10 @@ const adaptive=new OneEuro(1.6,.8),fixed=new OneEuro(1.6,0);adaptive.update(0,0)
 let av,fv;for(let i=1;i<=4;i++){av=adaptive.update(1,i*33);fv=fixed.update(1,i*33);}assert(av>fv+.08,'adaptive filtering must respond faster to deliberate movement');
 const quiet=new OneEuro(1.6,.3);let input=[],output=[];for(let i=0;i<120;i++){const v=(i%2?1:-1)*.03;input.push(v);output.push(quiet.update(v,i*33));}const rms=xs=>Math.sqrt(xs.slice(20).reduce((s,x)=>s+x*x,0)/(xs.length-20));assert(rms(output)<rms(input)*.5,'stationary jitter must be reduced');
 d.beginCalibration();assert(d.calibrating);assert.equal(d.baseline,null);
+const presence=new FacePresence();presence.accept({eyeL:0,eyeR:1,mouth:1,yaw:.8},100);
+assert.equal(presence.sample(250).pose.mouth,1,'brief occlusion must not interrupt a word');
+const released=presence.sample(450);assert.equal(released.state,'recovering');assert(released.pose.eyeL>0&&released.pose.eyeL<1);assert(released.pose.mouth>0&&released.pose.mouth<1);
+const lost=presence.sample(800);assert.equal(lost.state,'lost');assert.equal(lost.pose.eyeL,1);assert.equal(lost.pose.mouth,0);assert.equal(lost.pose.yaw,0);
+presence.accept({mouth:.2},850);assert.equal(presence.sample(870).state,'tracking');assert.equal(presence.sample(870).pose.mouth,.2);
+presence.reset();assert.equal(presence.sample(900).pose.mouth,0);assert.equal(presence.sample(900).state,'lost');
 console.log('PASS: personalized eye calibration, blink hysteresis, mouth opening, spike limiting, faster deliberate movement, jitter reduction, and reset.');

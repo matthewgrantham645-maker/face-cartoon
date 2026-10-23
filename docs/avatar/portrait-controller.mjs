@@ -1,44 +1,62 @@
-import {decodePortrait,defaultBinding,normalizeBinding,bindingFromLandmarks,buildPortrait} from './portrait-rig.mjs?v=10';
+import {decodePortrait,defaultBinding,normalizeBinding,bindingFromLandmarks,buildPortrait} from './portrait-rig.mjs?v=11';
+import {normalizeMotion,previewPose} from './portrait-motion.mjs?v=11';
 const $=id=>document.getElementById(id),Store=window.PortraitStore;
 let source=null,binding=null,record=null,name='',revision=0,edited=0,building=false,detecting=false,queuedDetection=0,drag=null,archive=null,appliedBinding=null,clickPoints=null;
+let history=[],redo=[],zoomRect=null;
+const ACTIVE_KEY='face-cartoon-active-portrait';
 const colors={head:'#ad70ed',eye0:'#2879ef',eye1:'#17a485',mouth:'#e86e49'};
 const labels={head:'头部',eye0:'画面左眼',eye1:'画面右眼',mouth:'嘴部'};
 const say=text=>{ $('portraitStatus').textContent=text; $('portraitActionStatus').textContent=text; };
 async function rendererReady(){
-  if(typeof window.IllustratedAvatar?.load==='function'&&window.IllustratedAvatar.apiVersion>=2)return window.IllustratedAvatar;
+  if(typeof window.IllustratedAvatar?.load==='function'&&window.IllustratedAvatar.apiVersion>=3)return window.IllustratedAvatar;
   return new Promise((resolve,reject)=>{
     let poll,timer;
     const cleanup=()=>{clearInterval(poll);clearTimeout(timer);window.removeEventListener('avatar-renderer-ready',check);};
-    const check=()=>{if(typeof window.IllustratedAvatar?.load==='function'&&window.IllustratedAvatar.apiVersion>=2){cleanup();resolve(window.IllustratedAvatar);}};
+    const check=()=>{if(typeof window.IllustratedAvatar?.load==='function'&&window.IllustratedAvatar.apiVersion>=3){cleanup();resolve(window.IllustratedAvatar);}};
     window.addEventListener('avatar-renderer-ready',check);poll=setInterval(check,50);
     timer=setTimeout(()=>{cleanup();const error=Error('页面的二维渲染模块版本不一致，请保存绑定并刷新页面。');error.code='RENDERER_VERSION';reject(error);},4000);
     check();
   });
 }
+function dirty(){return !!binding&&(!appliedBinding||JSON.stringify(binding)!==JSON.stringify(appliedBinding));}
+function checkpoint(){if(!binding)return;const value=JSON.stringify(binding);if(history.at(-1)!==value){history.push(value);if(history.length>40)history.shift();}redo=[];}
 function sync(){
   const disabled=building||!source;
   for(const id of ['applyPortrait','quickPortrait','portraitFeature','portraitX','portraitY','portraitWidth','portraitHeight'])$(id).disabled=disabled;
   $('detectPortrait').disabled=disabled||detecting;
   $('applyPortrait').textContent=building?'正在生成绑定…':'确认绑定并用于面捕';
-  $('exportPortrait').disabled=!archive||!window.IllustratedAvatar?.portrait||window.IllustratedAvatar.portrait.id!==record?.id;
+  $('undoPortrait').disabled=disabled||!history.length;$('redoPortrait').disabled=disabled||!redo.length;
+  $('portraitDirty').textContent=source?(dirty()?'有调整待应用':'已应用到当前角色'):'';
+  $('exportPortrait').disabled=dirty()||!archive||!window.IllustratedAvatar?.portrait||window.IllustratedAvatar.portrait.id!==record?.id;
+  if(window.IllustratedAvatar?.portrait?.id===record?.id)$('exportActivePortrait').disabled=building||dirty();
 }
 function syncFields(){if(!binding||!source)return;const b=binding[$('portraitFeature').value];$('portraitX').value=b.x/source.width*1000;$('portraitY').value=b.y/source.height*1000;$('portraitWidth').value=b.w/source.width*1000;$('portraitHeight').value=b.h/source.height*1000;sync();}
 function draw(){
   if(!source)return;const c=$('portraitEditorCanvas'),ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(source,0,0);
   const scale=source.width/600,selected=$('portraitFeature').value;
   for(const key of ['head','eye0','eye1','mouth']){const b=binding[key];ctx.strokeStyle=colors[key];ctx.fillStyle=colors[key];ctx.lineWidth=(key===selected?2.6:1.4)*scale;ctx.setLineDash(key==='head'?[7*scale,5*scale]:[]);ctx.strokeRect(b.x,b.y,b.w,b.h);ctx.setLineDash([]);ctx.font=`${12*scale}px sans-serif`;ctx.fillText(labels[key],b.x,Math.max(14*scale,b.y-5*scale));ctx.fillRect(b.x+b.w-4*scale,b.y+b.h-4*scale,8*scale,8*scale);}
+  const z=$('portraitZoom'),zx=z.getContext('2d'),box=binding[selected];
+  const rw=Math.min(source.width,Math.max(box.w*1.8,source.width*.13)),rh=Math.min(source.height,rw*z.height/z.width);
+  zoomRect={x:Math.max(0,Math.min(source.width-rw,box.x+box.w/2-rw/2)),y:Math.max(0,Math.min(source.height-rh,box.y+box.h/2-rh/2)),w:rw,h:rh};
+  zx.clearRect(0,0,z.width,z.height);zx.drawImage(source,zoomRect.x,zoomRect.y,rw,rh,0,0,z.width,z.height);
+  const x=(box.x-zoomRect.x)/rw*z.width,y=(box.y-zoomRect.y)/rh*z.height,w=box.w/rw*z.width,h=box.h/rh*z.height;
+  zx.strokeStyle=colors[selected];zx.lineWidth=2;zx.strokeRect(x,y,w,h);zx.fillStyle=colors[selected];zx.fillRect(x+w-5,y+h-5,10,10);
+  if(box.contour){zx.strokeStyle='#fff';zx.setLineDash([4,3]);zx.beginPath();box.contour.forEach(([px,py],i)=>{const a=(px-zoomRect.x)/rw*z.width,b=(py-zoomRect.y)/rh*z.height;i?zx.lineTo(a,b):zx.moveTo(a,b);});zx.closePath();zx.stroke();zx.setLineDash([]);}
+  $('portraitZoomLabel').textContent=labels[selected]+' · 放大校正';
 }
-function changeBox(key,next){
+
+function changeBox(key,next,remember=true){
+  if(remember)checkpoint();
   const old=binding[key],b={...old,...next};b.w=Math.max(4,Math.min(source.width,b.w));b.h=Math.max(4,Math.min(source.height,b.h));b.x=Math.max(0,Math.min(source.width-b.w,b.x));b.y=Math.max(0,Math.min(source.height-b.h,b.y));
   if(old.contour)b.contour=old.contour.map(([x,y])=>[b.x+(x-old.x)/old.w*b.w,b.y+(y-old.y)/old.h*b.h]);binding[key]=b;binding.method='manual';edited++;draw();syncFields();
 }
 async function showRecord(shot,{auto=true}={}){
-  if(building)return;const token=++revision;edited=0;source=null;binding=null;archive=null;appliedBinding=null;record=shot;name=shot.styleName||shot.sourceName||'我的图片';clickPoints=null;sync();
+  if(building)return;const token=++revision;edited=0;history=[];redo=[];source=null;binding=null;archive=null;appliedBinding=null;record=shot;name=shot.styleName||shot.sourceName||'我的图片';clickPoints=null;sync();
   $('portraitEditor').hidden=false;$('retryPortraitVersion').hidden=true;$('portraitTitle').textContent='确认五官 · '+name;say('正在准备图片…');
   try{
     const image=await decodePortrait(shot.result);if(token!==revision)return;source=image;
     try{binding=shot.portraitBinding?normalizeBinding(shot.portraitBinding,image.width,image.height):defaultBinding(image.width,image.height);}catch{binding=defaultBinding(image.width,image.height);}
-    const c=$('portraitEditorCanvas');c.width=image.width;c.height=image.height;syncFields();draw();
+    const c=$('portraitEditorCanvas');c.width=image.width;c.height=image.height;c.style.width=Math.min(600,550*image.width/image.height)+'px';syncFields();draw();
     say(shot.portraitBinding?'已恢复这张图片保存的绑定。确认后可直接用于面捕。':'请检查五官框；未识别到时可拖动校正。');
     if(auto&&!shot.portraitBinding)detect();
   }catch(error){if(token===revision){source=null;binding=null;say('图片无法导入：'+error.message);sync();}}
@@ -60,7 +78,7 @@ async function detect(){
     }
     if(token!==revision||editAt!==edited)return;
     if(!found){say('三次尝试仍未能可靠识别人脸，原来的框没有改变。可点“三点快速标定”，依次点左眼、右眼和嘴，再确认绑定。');return;}
-    binding=found;syncFields();draw();
+    checkpoint();found.motion=normalizeMotion(binding.motion);binding=found;edited++;syncFields();draw();
     if(window.IllustratedAvatar?.portrait?.id===record?.id){detecting=false;await apply();}
     else say('已定位并更新预览框，尚未应用。确认位置后点击“确认绑定并用于面捕”。');
   }catch(error){if(token===revision&&editAt===edited)say('自动定位不可用：'+error.message+' 可改用“三点快速标定”。');}
@@ -75,8 +93,8 @@ async function apply(){
     const built=await buildPortrait(source,valid,name);if(token!==revision)return;
     const ok=await renderer.load(new Blob([built.archive],{type:'application/zip'}),name,{id:shot.id,method:valid.method,binding:built.binding});
     if(!ok)throw Error(renderer.lastError||'渲染器加载失败，请查看二维角色状态。');
-    archive=built.archive;appliedBinding=built.binding;binding=built.binding;
-    try{if(!await Store.saveBinding(shot.id,built.binding))throw Error();say('已应用到左侧角色。先点“自动演示”查看效果，再开启面捕；这张图片的绑定已保存。');}
+    archive=built.archive;appliedBinding=structuredClone(built.binding);binding=structuredClone(built.binding);
+    try{if(!await Store.saveBinding(shot.id,built.binding))throw Error();try{localStorage.setItem(ACTIVE_KEY,shot.id);}catch{}say('已应用到左侧角色。先点“自动演示”查看效果，再开启面捕；这张图片的绑定已保存。');}
     catch{say('已应用到左侧角色，可以面捕。本地记录未能保存，请导出 .mavatar 留存。');}
     draw();
   }catch(error){
@@ -113,34 +131,60 @@ $('retryPortraitVersion').onclick=async()=>{
   try{
     const saved=normalizeBinding(binding,source.width,source.height);
     if(!await Store.saveBinding(record.id,saved))await Store.put({...record,portraitBinding:saved});
-    const url=new URL(location.href);url.searchParams.set('portrait',record.id);url.searchParams.set('v','10');location.replace(url.href);
+    const url=new URL(location.href);url.searchParams.set('portrait',record.id);url.searchParams.set('v','11');location.replace(url.href);
   }catch(error){say('未能保存绑定，暂未刷新。请保留当前页面，稍后重试：'+error.message);}
 };
 $('cancelPortrait').onclick=()=>{if(building)return;revision++;$('portraitEditor').hidden=true;};
 $('portraitFeature').onchange=()=>{syncFields();draw();};
 for(const [id,key,axis]of [['portraitX','x','width'],['portraitY','y','height'],['portraitWidth','w','width'],['portraitHeight','h','height']])$(id).oninput=()=>{if(!source||building)return;changeBox($('portraitFeature').value,{[key]:Number($(id).value)/1000*source[axis]});};
-const editor=$('portraitEditorCanvas');
-function point(event){const r=editor.getBoundingClientRect();return {x:(event.clientX-r.left)/r.width*editor.width,y:(event.clientY-r.top)/r.height*editor.height};}
-editor.addEventListener('pointerdown',e=>{
-  if(!source||building)return;const p=point(e);
-  if(clickPoints){clickPoints.push(p);e.preventDefault();if(clickPoints.length<3){say(clickPoints.length===1?'请点击画面右侧眼睛的中心（第 2/3 点）。':'请点击闭合嘴唇的中心（第 3/3 点）。');return;}
-    const eyes=clickPoints.slice(0,2).sort((a,b)=>a.x-b.x),m=clickPoints[2],dist=eyes[1].x-eyes[0].x;clickPoints=null;
-    if(dist<source.width*.04||m.y<=Math.max(eyes[0].y,eyes[1].y)){say('标定点位置不合理，请重新点击三点快速标定。');return;}
-    eyes.forEach((v,i)=>{binding['eye'+i]={x:v.x-dist*.23,y:v.y-dist*.055,w:dist*.46,h:dist*.11};});binding.mouth={x:m.x-dist*.4,y:m.y-dist*.07,w:dist*.8,h:dist*.14};binding.method='manual';edited++;syncFields();draw();say('三点标定完成。眼框应贴合眼睛，嘴框应贴合嘴唇，确认后点击用于面捕。');return;
-  }
-  const hit=14*source.width/editor.getBoundingClientRect().width;
-  for(const key of ['eye0','eye1','mouth','head']){const b=binding[key],resize=Math.abs(p.x-b.x-b.w)<hit&&Math.abs(p.y-b.y-b.h)<hit;
-    if(resize||(p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h)){edited++;$('portraitFeature').value=key;drag={key,start:p,box:{...b},resize};editor.setPointerCapture(e.pointerId);syncFields();draw();e.preventDefault();break;}}
+const editor=$('portraitEditorCanvas'),zoom=$('portraitZoom');
+function point(event,canvas,region){const r=canvas.getBoundingClientRect(),x=(event.clientX-r.left)/r.width,y=(event.clientY-r.top)/r.height;return region?{x:region.x+x*region.w,y:region.y+y*region.h}:{x:x*source.width,y:y*source.height};}
+function finishPoints(p){
+  clickPoints.push(p);if(clickPoints.length<3){say(clickPoints.length===1?'请点击画面右侧眼睛的中心（第 2/3 点）。':'请点击闭合嘴唇的中心（第 3/3 点）。');return;}
+  const eyes=clickPoints.slice(0,2).sort((a,b)=>a.x-b.x),m=clickPoints[2],dist=eyes[1].x-eyes[0].x;clickPoints=null;
+  if(dist<source.width*.04||m.y<=Math.max(eyes[0].y,eyes[1].y)){say('标定点位置不合理，请重新点击三点快速标定。');return;}
+  checkpoint();eyes.forEach((v,i)=>{binding['eye'+i]={x:v.x-dist*.23,y:v.y-dist*.055,w:dist*.46,h:dist*.11};});binding.mouth={x:m.x-dist*.4,y:m.y-dist*.07,w:dist*.8,h:dist*.14};binding.method='manual';edited++;syncFields();draw();say('三点标定完成。可在放大图中微调眼框和嘴框，再确认绑定。');
+}
+for(const canvas of [editor,zoom]){
+  canvas.addEventListener('pointerdown',e=>{
+    if(!source||building)return;const region=canvas===zoom?{...zoomRect}:null,p=point(e,canvas,region);
+    if(clickPoints){if(canvas===editor)finishPoints(p);e.preventDefault();return;}
+    const hit=canvas===zoom?12*region.w/canvas.getBoundingClientRect().width:14*source.width/canvas.getBoundingClientRect().width;
+    const keys=canvas===zoom?[$('portraitFeature').value]:['eye0','eye1','mouth','head'];
+    for(const key of keys){const b=binding[key],resize=Math.abs(p.x-b.x-b.w)<hit&&Math.abs(p.y-b.y-b.h)<hit;
+      if(resize||(p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h)){checkpoint();edited++;$('portraitFeature').value=key;drag={key,start:p,box:{...b},resize,canvas,region};canvas.setPointerCapture(e.pointerId);syncFields();draw();e.preventDefault();break;}}
+  });
+  canvas.addEventListener('pointermove',e=>{if(!drag||drag.canvas!==canvas)return;const p=point(e,canvas,drag.region),dx=p.x-drag.start.x,dy=p.y-drag.start.y;changeBox(drag.key,drag.resize?{w:drag.box.w+dx,h:drag.box.h+dy}:{x:drag.box.x+dx,y:drag.box.y+dy},false);});
+  for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,()=>{drag=null;});
+  canvas.addEventListener('keydown',e=>{
+    if(!source||building)return;
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();(e.shiftKey?$('redoPortrait'):$('undoPortrait')).click();return;}
+    const delta={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];if(!delta)return;e.preventDefault();const key=$('portraitFeature').value,b=binding[key],step=e.shiftKey?10:1;changeBox(key,{x:b.x+delta[0]*step,y:b.y+delta[1]*step});
+  });
+}
+$('undoPortrait').onclick=()=>{if(building||!history.length)return;const motion=binding.motion;redo.push(JSON.stringify(binding));binding=JSON.parse(history.pop());binding.motion=motion;edited++;clickPoints=null;draw();syncFields();};
+$('redoPortrait').onclick=()=>{if(building||!redo.length)return;const motion=binding.motion;history.push(JSON.stringify(binding));binding=JSON.parse(redo.pop());binding.motion=motion;edited++;clickPoints=null;draw();syncFields();};
+for(const button of document.querySelectorAll('[data-portrait-preview]'))button.onclick=()=>{
+  if(!window.IllustratedAvatar?.active)return;const name=button.dataset.portraitPreview;
+  window.AvatarControls?.preview(button.textContent,t=>previewPose(name,t));
+  document.querySelectorAll('[data-portrait-preview]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
+};
+window.addEventListener('avatar-mode-change',e=>{if(e.detail.mode!=='preview')document.querySelectorAll('[data-portrait-preview]').forEach(b=>b.setAttribute('aria-pressed','false'));});
+window.addEventListener('avatar-portrait-motion',e=>{
+  if(!appliedBinding||e.detail.id!==record?.id)return;
+  const motion=normalizeMotion(e.detail.motion);appliedBinding.motion=motion;binding.motion={...motion};sync();
+  Store.saveBinding(record.id,structuredClone(appliedBinding)).then(saved=>{if(!saved)throw Error();}).catch(()=>say('微调已生效，但浏览器未能保存。请导出 .mavatar 留存。'));
 });
-editor.addEventListener('pointermove',e=>{if(!drag)return;const p=point(e),dx=p.x-drag.start.x,dy=p.y-drag.start.y;changeBox(drag.key,drag.resize?{w:drag.box.w+dx,h:drag.box.h+dy}:{x:drag.box.x+dx,y:drag.box.y+dy});});
-for(const type of ['pointerup','pointercancel','lostpointercapture'])editor.addEventListener(type,()=>{drag=null;});
-editor.addEventListener('keydown',e=>{if(!source||building)return;const delta={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];if(!delta)return;e.preventDefault();const key=$('portraitFeature').value,b=binding[key],step=e.shiftKey?10:1;changeBox(key,{x:b.x+delta[0]*step,y:b.y+delta[1]*step});});
-$('exportPortrait').onclick=()=>{if(!archive)return;const url=URL.createObjectURL(new Blob([archive],{type:'application/zip'})),a=document.createElement('a');a.href=url;a.download='my-portrait.mavatar';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);};
+$('exportPortrait').onclick=()=>{if(archive&&!dirty())window.IllustratedAvatar?.exportArchive();};
 window.addEventListener('avatar-import-portrait',e=>importFile(e.detail.file));
 window.addEventListener('avatar-renderer-change',sync);
 window.addEventListener('pagehide',()=>{revision++;});
 // Read-only diagnostics used by the browser test and user bug reports.
-window.PortraitDiagnostics={snapshot:()=>({id:record?.id||null,name,building,detecting,binding:binding?structuredClone(binding):null,applied:appliedBinding?structuredClone(appliedBinding):null})};
-const id=new URLSearchParams(location.search).get('portrait');
-if(id){gallery();Store.get(id).then(shot=>{if(shot)return showRecord(shot);$('portraitLibraryStatus').textContent='找不到这张图片，记录可能已清空。请选择其他记录或导入本地图片。';}).catch(()=>{$('portraitLibrary').hidden=false;$('portraitLibraryStatus').textContent='读取失败，请使用“导入二维角色”选择下载的图片。';});}
+window.PortraitDiagnostics={snapshot:()=>({id:record?.id||null,name,building,detecting,binding:binding?structuredClone(binding):null,applied:appliedBinding?structuredClone(appliedBinding):null,dirty:dirty(),history:history.length,zoom:zoomRect?{...zoomRect}:null})};
+let remembered=null;try{remembered=localStorage.getItem(ACTIVE_KEY);}catch{}
+const id=new URLSearchParams(location.search).get('portrait')||remembered;
+if(id){gallery();Store.get(id).then(async shot=>{
+  if(!shot){$('portraitLibraryStatus').textContent='找不到这张图片，记录可能已清空。请选择其他记录或导入本地图片。';if(id===remembered)try{localStorage.removeItem(ACTIVE_KEY);}catch{}return;}
+  await showRecord(shot);if(id===remembered&&shot.portraitBinding&&source&&!building)await apply();
+}).catch(()=>{$('portraitLibrary').hidden=false;$('portraitLibraryStatus').textContent='读取失败，请使用“导入二维角色”选择下载的图片。';});}
 sync();

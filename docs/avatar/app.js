@@ -8,17 +8,18 @@
   let lastTick=performance.now(),lastUI=0,startAt=0,lastSent=0,lastVideo=-1,lastFace=0;
   let latestPoints=null,pendingFrame=null,purpose='live',frameResult=null,starting=false,generating=false,epoch=0;
   let calibrating=false,frameCount=0,lastReport=0,inferenceMS=0,inputCount=0,poseSequence=0;
-  const motion=new AvatarMotion.MotionDriver(),mouthDriver=new AvatarFaceResponse.MouthDriver();
+  const motion=new AvatarMotion.MotionDriver(),mouthDriver=new AvatarFaceResponse.MouthDriver(),presence=new AvatarMotion.FacePresence();
+  let previewFactory=null,presenceState='lost';
   let pendingAppearance=null,pendingOrigin='';
   const mediaRoot='https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/';
   const say=text=>$('status').textContent=text;
   try{const stored=localStorage.getItem('flat-avatar-v2');if(stored){appearance=A.sanitize(JSON.parse(stored));$('origin').textContent='当前：已保存的角色参数。';}}catch{}
   function syncLook(){for(const name of lookFields)if(name==='glasses')$(name).checked=appearance[name];else $(name).value=appearance[name];}
   function remember(){try{localStorage.setItem('flat-avatar-v2',JSON.stringify(appearance));}catch{}}
-  function setMode(next){mode=next;for(const id of ['manual','demo','camera'])$(id).classList.toggle('active',id===next);if(next==='manual')say('手动控制 · 滑块改变眼睑、嘴型和姿态的曲线。');if(next==='demo'){startAt=performance.now();say('自动演示 · 预设表情与转头，不代表正在跟踪。');}}
+  function setMode(next){mode=next;if(next!=='preview')previewFactory=null;for(const id of ['manual','demo','camera'])$(id).classList.toggle('active',id===next||(id==='manual'&&next==='preview'));window.dispatchEvent?.(new CustomEvent('avatar-mode-change',{detail:{mode:next}}));if(next==='manual')say('手动控制 · 滑块改变眼睑、嘴型和姿态的曲线。');if(next==='demo'){startAt=performance.now();say('自动演示 · 预设表情与转头，不代表正在跟踪。');}}
   function reset(){target=A.neutral();setMode('manual');syncPose();}
   function syncPose(){for(const name of poseFields){$(name).value=shown[name];$(name+'Value').textContent=shown[name].toFixed(2);}}
-  function stop(){epoch++;if(stream)stream.getTracks().forEach(track=>track.stop());stream=null;video.srcObject=null;latestPoints=null;motion.beginCalibration();mouthDriver.reset();calibrating=false;$('capture').disabled=$('calibrate').disabled=$('calibrateMouth').disabled=$('stop').disabled=true;if(mode==='camera'){reset();say('摄像头已关闭。');}updateEngine();}
+  function stop(){epoch++;if(stream)stream.getTracks().forEach(track=>track.stop());stream=null;video.srcObject=null;latestPoints=null;if(pendingFrame){const old=tracker;tracker=null;pendingFrame=null;Promise.resolve(old?.close?.()).catch(()=>{});}presence.reset();motion.beginCalibration();mouthDriver.reset();calibrating=false;$('capture').disabled=$('calibrate').disabled=$('calibrateMouth').disabled=$('stop').disabled=true;if(mode==='camera'){reset();say('摄像头已关闭。');}updateEngine();}
   const isOfficial=()=>$('trackingProfile').value==='official';
   function profileControls(){
     const official=isOfficial();
@@ -28,7 +29,7 @@
     $('mouthGain').disabled=false;
     $('profileHelp').textContent=official?'KalidoKit 姿态与眼睛映射，下方可启用小幅张嘴增强。灵敏度对两种映射均生效；闭嘴不归零时点“校准闭嘴”。':'个人校准：开启后保持正面、睁眼、闭嘴约 1–2 秒；可独立调整张嘴灵敏度。';
   }
-  function calibrate(){motion.beginCalibration();calibrating=!isOfficial();target=A.neutral();profileControls();say(calibrating?'正在校准：请正视镜头、睁眼、闭嘴约 1–2 秒。':'参考官方映射已接入 · 可以眨眼、说话、转头和移动视线。');}
+  function calibrate(){motion.beginCalibration();presence.reset();calibrating=!isOfficial();target=A.neutral();profileControls();say(calibrating?'正在校准：请正视镜头、睁眼、闭嘴约 1–2 秒。':'参考官方映射已接入 · 可以眨眼、说话、转头和移动视线。');}
   function receive(results){
     frameResult=results.multiFaceLandmarks?.[0]||null;
     if(purpose!=='live'||!stream)return;
@@ -46,7 +47,7 @@
     if(wasCalibrating&&!calibrating)mouthDriver.setBaseline(motion.baseline?.aperture);
     const wasMouthCalibrating=!!mouthDriver.samples;
     const mouth=mouthDriver.update(latestPoints,{width:video.videoWidth,height:video.videoHeight},result.pose.mouth,Number($('mouthGain').value),$('sensitiveMouth').checked);
-    target=A.pose({...result.pose,mouth:calibrating?0:mouth});
+    target=A.pose({...result.pose,mouth:calibrating?0:mouth});presence.accept(target,now);presenceState='tracking';
     if(wasMouthCalibrating&&!mouthDriver.samples)say('闭嘴校准完成 · 小幅张嘴即可驱动口型。');
     if(result.warning)say(result.warning);
     if(wasCalibrating&&!calibrating){frameCount=0;lastReport=now;say('个人校准完成 · 可以眨眼、说话、转头和移动视线。');}
@@ -64,7 +65,16 @@
     })();
     try{await loadPromise;}catch(error){tracker=null;throw error;}finally{loadPromise=null;}
   }
-  async function send(image,kind){purpose=kind;frameResult=null;const start=performance.now();await tracker.send({image});if(kind==='live')inferenceMS=inferenceMS?inferenceMS*.85+(performance.now()-start)*.15:performance.now()-start;return frameResult?frameResult.map(p=>({...p})):null;}
+  async function send(image,kind){
+    purpose=kind;frameResult=null;const start=performance.now(),instance=tracker;let timeout;
+    try{
+      const work=instance.send({image});
+      if(kind==='live')await Promise.race([work,new Promise((resolve,reject)=>{timeout=setTimeout(()=>reject(Error('摄像头跟踪超时，请重新开启面捕。')),10000);})]);else await work;
+      if(kind==='live')inferenceMS=inferenceMS?inferenceMS*.85+(performance.now()-start)*.15:performance.now()-start;
+      return frameResult?frameResult.map(p=>({...p})):null;
+    }catch(error){if(instance&&tracker===instance){tracker=null;Promise.resolve(instance.close?.()).catch(()=>{});}throw error;}
+    finally{clearTimeout(timeout);}
+  }
   // Reuse the same detector, serializing still-image work with camera frames.
   // No camera permission or external image-generation request is involved.
   window.AvatarPortraitDetector={detect:async image=>{
@@ -90,7 +100,7 @@
       await loadTracker();if(token!==epoch)return;
       if(!navigator.mediaDevices?.getUserMedia)throw Error('请通过 localhost 打开页面并允许摄像头权限。');
       const acquired=await navigator.mediaDevices.getUserMedia({audio:false,video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}}});
-      if(token!==epoch){acquired.getTracks().forEach(t=>t.stop());return;}stream=acquired;video.srcObject=stream;await video.play();
+      if(token!==epoch){acquired.getTracks().forEach(t=>t.stop());return;}stream=acquired;for(const track of acquired.getVideoTracks?.()||[])track.addEventListener('ended',()=>{if(stream===acquired){stop();say('摄像头连接已断开，请重新选择或连接设备后开启面捕。');}},{once:true});video.srcObject=stream;await video.play();
       if(token!==epoch)return;
       $('capture').disabled=$('calibrate').disabled=$('stop').disabled=false;lastVideo=-1;lastFace=performance.now();frameCount=0;lastReport=lastFace;
       setMode('camera');calibrate();updateEngine();
@@ -128,17 +138,18 @@
   }
   function tick(now){
     const dt=Math.max(0,Math.min(100,now-lastTick));lastTick=now;
+    if(mode==='preview'&&previewFactory)target=A.pose(previewFactory((now-startAt)/1000));
     if(mode==='demo'){
       const t=(now-startAt)/1000,blink=Math.exp(-Math.pow(((t%3.2)-.8)/.065,2));
       target=A.pose({eyeL:1-blink,eyeR:1-blink,mouth:Math.max(0,Math.sin(t*5))*.8,smile:.35,yaw:Math.sin(t*.9)*.72,pitch:Math.sin(t*.63)*.35,roll:Math.sin(t*.75)*.28,gazeX:Math.sin(t*1.2)*.6,gazeY:Math.sin(t*.7)*.25,brow:Math.max(0,Math.sin(t*.8))*.3,pucker:Math.max(0,Math.sin(t*3))*.5});
     }
-    if(stream&&!generating){
-      if(mode==='camera'&&now-lastFace>700){target=A.neutral();if(now-lastFace>1600)say('暂未看清人脸，角色回到中性表情。请面对镜头。');}
+    if(stream&&!generating&&!document.hidden){
+      if(mode==='camera'&&!calibrating){const recovery=presence.sample(now);target=recovery.pose;presenceState=recovery.state;if(recovery.age>1600)say('暂未看清人脸，角色已平滑回到中性表情。请面对镜头。');}
       // Do not wait for currentTime to change. Some local cameras keep it at 0,
       // which previously froze the character after the first frame.
-      if(!pendingFrame&&video.readyState>=2&&video.videoWidth>0&&now-lastSent>=1000/Number($('captureRate').value)){
+      if(mode==='camera'&&!pendingFrame&&video.readyState>=2&&video.videoWidth>0&&now-lastSent>=1000/Number($('captureRate').value)){
         lastSent=now;lastVideo=video.currentTime;
-        pendingFrame=send(video,'live').catch(error=>{stop();say('面捕失败：'+error.message);console.error(error);}).finally(()=>pendingFrame=null);
+        const sentEpoch=epoch,work=send(video,'live').catch(error=>{if(sentEpoch===epoch){stop();say('面捕失败：'+error.message);console.error(error);}}).finally(()=>{if(pendingFrame===work)pendingFrame=null;});pendingFrame=work;
       }
       if(mode==='camera'&&!calibrating&&now-lastFace<700&&now-lastReport>2000){say('面捕驱动中 · '+Math.round(frameCount*1000/(now-lastReport))+' 次/秒 · 处理约 '+Math.round(inferenceMS)+' ms/帧');frameCount=0;lastReport=now;}
     }
@@ -168,8 +179,12 @@
   function download(href,name){const a=document.createElement('a');a.href=href;a.download=name;a.click();}
   $('savePNG').onclick=()=>download((window.IllustratedAvatar?.active?window.IllustratedAvatar.canvas:canvas).toDataURL('image/png'),'my-flat-avatar.png');
   $('saveConfig').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:3,appearance},null,2)],{type:'application/json'}));download(url,'my-avatar.json');setTimeout(()=>URL.revokeObjectURL(url),1000);};
-  window.AvatarDiagnostics={snapshot:()=>({version:6,mode,profile:$('trackingProfile').value,sequence:poseSequence,inputCount,calibrating,inferenceMS,inputAgeMS:mode==='camera'?Math.round(performance.now()-lastFace):null,pose:{...shown},target:{...target},mouthResponse:mouthDriver.snapshot(),mesh:window.AvatarMeshBridge.mapPose(shown,Number($('bodyFollow').value),Number($('turnStrength').value)),reference:window.Live2DReference?.snapshot()||null})};
-  $('saveDiagnostics').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(window.AvatarDiagnostics.snapshot(),null,2)],{type:'application/json'}));download(url,'avatar-motion-diagnostics.json');setTimeout(()=>URL.revokeObjectURL(url),1000);};
+  window.AvatarControls={preview(name,factory){
+    if(typeof factory!=='function')return;setMode('preview');previewFactory=factory;startAt=performance.now();
+    target=A.pose(factory(0));say('表情预览 · '+name+'。点击手动控制或开启面捕结束预览。');updateEngine();
+  }};
+  window.AvatarDiagnostics={snapshot:()=>({version:6,appVersion:11,mode,presence:presenceState,renderer:window.IllustratedAvatar?.snapshot?.()||null,profile:$('trackingProfile').value,sequence:poseSequence,inputCount,calibrating,inferenceMS,inputAgeMS:mode==='camera'?Math.round(performance.now()-lastFace):null,pose:{...shown},target:{...target},mouthResponse:mouthDriver.snapshot(),mesh:window.AvatarMeshBridge.mapPose(shown,Number($('bodyFollow').value),Number($('turnStrength').value)),reference:window.Live2DReference?.snapshot()||null})};
+  $('saveDiagnostics').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({...window.AvatarDiagnostics.snapshot(),geometry:window.IllustratedAvatar?.geometry?.()||[],binding:window.PortraitDiagnostics?.snapshot?.()||null},null,2)],{type:'application/json'}));download(url,'avatar-motion-diagnostics.json');setTimeout(()=>URL.revokeObjectURL(url),1000);};
   window.addEventListener('pagehide',stop);
   fetch('/api/status').then(r=>{if(!r.ok)throw Error();return r.json();}).then(data=>{
     $('useAI').disabled=!data.configured;$('apiStatus').textContent=data.configured?'DeepSeek 已配置。勾选后，拍照或上传生成时才发送该照片。':'DeepSeek 未配置：可先使用本地拍照生成和全部动画功能。';

@@ -74,5 +74,19 @@
       this.last=A.pose(next);this.lastTime=now;return{pose:this.last,calibrating:false,progress:1};
     }
   }
-  const api={OneEuro,measure,MotionDriver};root.AvatarMotion=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  // Preserve brief occlusions, then release expression and pose together. A lost
+  // face must not leave a closed eye or an open mouth frozen on screen.
+  class FacePresence {
+    constructor(){this.reset();}
+    reset(){this.time=null;this.pose=A.neutral();}
+    accept(pose,now){this.pose=A.pose(pose);this.time=now;}
+    sample(now){
+      const age=this.time===null?Infinity:Math.max(0,now-this.time);
+      if(age<=180)return {pose:{...this.pose},age,state:'tracking'};
+      const t=clamp((age-180)/420),blend=t*t*(3-2*t),neutral=A.neutral(),pose={};
+      for(const key in neutral)pose[key]=this.pose[key]+(neutral[key]-this.pose[key])*blend;
+      return {pose:A.pose(pose),age,state:t>=1?'lost':'recovering'};
+    }
+  }
+  const api={OneEuro,measure,MotionDriver,FacePresence};root.AvatarMotion=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

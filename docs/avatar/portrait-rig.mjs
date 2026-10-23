@@ -1,6 +1,7 @@
 // Browser-side base rig for a single portrait; original image textures are retained.
 // Geometry targets the existing MIT mesh-avatar runtime; it does not create Cubism files.
-import {packAvatar,validateRig} from './vendor/mesh-avatar-0.2.1.mjs?v=10';
+import {packAvatar,validateRig} from './vendor/mesh-avatar-0.2.1.mjs?v=11';
+import {normalizeMotion} from './portrait-motion.mjs?v=11';
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const ellipse=(cx,cy,rx,ry)=>({cx,cy,rx:Math.max(1,rx),ry:Math.max(1,ry)});
 const clone=value=>JSON.parse(JSON.stringify(value));
@@ -12,7 +13,7 @@ export function defaultBinding(w,h){
 }
 export function normalizeBinding(value,w,h){
   if(!value||value.version!==1)throw Error('五官绑定格式无效。');
-  const out={version:1,width:w,height:h,method:value.method==='detected'?'detected':'manual'};
+  const out={version:1,width:w,height:h,method:value.method==='detected'?'detected':'manual',motion:normalizeMotion(value.motion)};
   const sx=w/Number(value.width),sy=h/Number(value.height);
   if(!Number.isFinite(sx+sy)||sx<=0||sy<=0)throw Error('五官绑定尺寸无效。');
   for(const key of ['head','eye0','eye1','mouth']){
@@ -58,7 +59,7 @@ export function rigForBinding(input,w,h){
   const b=normalizeBinding(input,w,h),head=b.head,ex=b.eye0,ey=b.eye1,m=b.mouth;
   const hx=head.x+head.w/2,hy=head.y+head.h/2,chin=Math.max(m.y+m.h*2,head.y+head.h*.92);
   const eyes=[ex,ey].map(e=>{const poly=opening(e);return {opening:poly,roi:[[e.x,e.y],[e.x+e.w,e.y],[e.x+e.w,e.y+e.h],[e.x,e.y+e.h]],...curves(poly)};});
-  const rig={version:1,portrait:{version:2,teeth:false,blinkLid:true},image:{width:w,height:h},head:{...ellipse(hx,hy,head.w/2,head.h/2),shiftX:head.w*.065,shiftY:head.h*.035,pivotX:hx,pivotY:chin,maxRoll:.10,weightBand:[chin,Math.max(chin+4,Math.min(h,chin+head.h*.28))],turnBand:[chin,Math.max(chin+5,Math.min(h,chin+head.h*.3))]},
+  const rig={version:1,portrait:{version:2,teeth:false,blinkLid:true,motion:b.motion},image:{width:w,height:h},head:{...ellipse(hx,hy,head.w/2,head.h/2),shiftX:head.w*.065,shiftY:head.h*.035,pivotX:hx,pivotY:chin,maxRoll:.10,weightBand:[chin,Math.max(chin+4,Math.min(h,chin+head.h*.28))],turnBand:[chin,Math.max(chin+5,Math.min(h,chin+head.h*.3))]},
     body:{pivotX:w/2,pivotY:h*1.15,maxRoll:.02,breathBand:[h*.78,h],rollBand:[h*.75,h],chest:ellipse(w/2,h*.9,w*.25,h*.13),shoulders:[ellipse(w*.2,h*.86,w*.12,h*.12),ellipse(w*.8,h*.86,w*.12,h*.12)]},
     face:{nose:ellipse((ex.x+ex.w+ey.x)/2,(ex.y+ex.h+m.y)/2,head.w*.09,head.h*.13),mouth:ellipse(m.x+m.w/2,m.y+m.h/2,m.w*.8,m.h*3),eyeA:ellipse(ex.x+ex.w/2,ex.y+ex.h/2,ex.w*.8,ex.h*1.6),eyeB:ellipse(ey.x+ey.w/2,ey.y+ey.h/2,ey.w*.8,ey.h*1.6),earL:ellipse(head.x+head.w*.12,hy,head.w*.08,head.h*.15),earR:ellipse(head.x+head.w*.88,hy,head.w*.08,head.h*.15),
       brow:{...ellipse(hx,Math.min(ex.y,ey.y)-head.h*.04,head.w*.36,head.h*.04),band:[Math.min(ex.y,ey.y)-head.h*.03,Math.min(ex.y,ey.y)]},jaw:{...ellipse(m.x+m.w/2,chin,head.w*.22,head.h*.12),band:[m.y+m.h,Math.max(m.y+m.h+2,chin)]}},
@@ -145,6 +146,19 @@ export function subjectMotionMask(source,binding){
     const value=Math.round(255*alpha*fade*smooth(oval/.22)*Math.max(seen[i]?0:1,smooth(core/.35)));
     out.data[i*4]=out.data[i*4+1]=out.data[i*4+2]=value;out.data[i*4+3]=255;
   }
+  // A distance-limited feather only reduces existing weights. In particular,
+  // a zero background pixel stays zero; unlike blurring, no motion leaks out.
+  const weight=new Float32Array(w*h),step=255/Math.max(12,Math.min(70,b.w*.12)),diag=step*Math.SQRT2;
+  for(let i=0;i<weight.length;i++)weight[i]=out.data[i*4];
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const i=y*w+x;let v=weight[i];if(x)v=Math.min(v,weight[i-1]+step);if(y)v=Math.min(v,weight[i-w]+step);
+    if(x&&y)v=Math.min(v,weight[i-w-1]+diag);if(x<w-1&&y)v=Math.min(v,weight[i-w+1]+diag);weight[i]=v;
+  }
+  for(let y=h-1;y>=0;y--)for(let x=w-1;x>=0;x--){
+    const i=y*w+x;let v=weight[i];if(x<w-1)v=Math.min(v,weight[i+1]+step);if(y<h-1)v=Math.min(v,weight[i+w]+step);
+    if(x<w-1&&y<h-1)v=Math.min(v,weight[i+w+1]+diag);if(x&&y<h-1)v=Math.min(v,weight[i+w-1]+diag);weight[i]=v;
+  }
+  for(let i=0;i<weight.length;i++)out.data[i*4]=out.data[i*4+1]=out.data[i*4+2]=Math.floor(weight[i]);
   mask.getContext('2d').putImageData(out,0,0);return mask;
 }
 function mouthLayers(source,base,box,rig){
@@ -198,7 +212,7 @@ export async function buildPortrait(source,input,name='我的生成形象'){
   const subject=subjectMotionMask(source,binding);layers.subject=[0,0,w,h];jobs.push(pngBytes(subject).then(bytes=>files['built/subject.png']=bytes));
   const hairmask=makeCanvas(w,h); // No fabricated hair dynamics for an unknown picture.
   files['avatar.json']=jsonBytes({format:'mesh-avatar',version:1,name,source:'source.png',author:'User portrait, browser base rig'});
-  files['rig.json']=jsonBytes(rig);files['built/layers.json']=jsonBytes({version:1,size:[w,h],build:'portrait-v10',layers,eyes});
+  files['rig.json']=jsonBytes(rig);files['built/layers.json']=jsonBytes({version:1,size:[w,h],build:'portrait-v11',layers,eyes});
   jobs.push(pngBytes(base).then(b=>files['built/base.png']=b),pngBytes(hairmask).then(b=>files['built/hairmask.png']=b),pngBytes(source).then(b=>files['source.png']=b));
   await Promise.all(jobs);const archive=packAvatar(files);
   return {archive,binding:clone(binding),rig};

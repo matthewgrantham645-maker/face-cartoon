@@ -11,7 +11,7 @@ const root=path.resolve(__dirname,'..'),out=process.env.AVATAR_QA_DIR,port=18774
   await page.route('**/api/status',r=>r.fulfill({json:{configured:false,selfie:false}}));
   await page.goto(`http://127.0.0.1:${port}/avatar/`);await page.waitForFunction(()=>IllustratedAvatar.active);
   const data=await page.evaluate(async()=>{
-   const R=await import('/avatar/portrait-rig.mjs?v=10'),c=document.createElement('canvas');c.width=600;c.height=800;const x=c.getContext('2d');
+   const R=await import('/avatar/portrait-rig.mjs?v=11'),c=document.createElement('canvas');c.width=600;c.height=800;const x=c.getContext('2d');
    for(let y=0;y<800;y+=20)for(let a=0;a<600;a+=20){x.fillStyle=(a+y)%40?'#c9d5d9':'#e7dcd0';x.fillRect(a,y,20,20);}
    x.fillStyle='#1e334e';x.fillRect(130,480,340,320);x.fillStyle='#f0c8a5';x.beginPath();x.ellipse(300,275,116,190,0,0,Math.PI*2);x.fill();
    x.fillStyle='#29292e';x.beginPath();x.ellipse(300,140,115,77,0,0,Math.PI*2);x.fill();
@@ -21,7 +21,7 @@ const root=path.resolve(__dirname,'..'),out=process.env.AVATAR_QA_DIR,port=18774
    const built=await R.buildPortrait(c,b,'render-pattern');
    const ok=await IllustratedAvatar.load(new Blob([built.archive],{type:'application/zip'}),'render-pattern',{id:'pattern'});if(!ok)throw Error(IllustratedAvatar.lastError);
    window.qSource={w:600,h:800,binding:b};window.qFrames={};
-   const V=await import('/avatar/vendor/mesh-avatar-0.2.1.mjs?v=10'),files=V.unpackAvatar(built.archive),layers=JSON.parse(new TextDecoder().decode(files['built/layers.json'])).layers;
+   const V=await import('/avatar/vendor/mesh-avatar-0.2.1.mjs?v=11'),files=V.unpackAvatar(built.archive),layers=JSON.parse(new TextDecoder().decode(files['built/layers.json'])).layers;
    const restored=document.createElement('canvas');restored.width=600;restored.height=800;const rx=restored.getContext('2d');
    const paint=async key=>{const im=await createImageBitmap(new Blob([files['built/'+key+'.png']],{type:'image/png'}));const r=key==='base'?[0,0,600,800]:layers[key];rx.drawImage(im,r[0],r[1]);im.close();};
    await paint('base');for(let i=0;i<2;i++)for(const part of ['ball','low','lash'])await paint('eye'+i+'_'+part);
@@ -40,9 +40,9 @@ const root=path.resolve(__dirname,'..'),out=process.env.AVATAR_QA_DIR,port=18774
   const movement=await page.evaluate(()=>{
    const a=qRegion('neutral',[4,4,90,770]),b=qRegion('turned',[4,4,90,770]);let sum=0,max=0;for(let i=0;i<a.length;i++)for(let k=0;k<4;k++){const d=Math.abs(a[i][k]-b[i][k]);sum+=d;max=Math.max(max,d);}
    const f=qRegion('neutral',[225,220,150,180]),g=qRegion('turned',[225,220,150,180]);let changed=0;for(let i=0;i<f.length;i++)if(Math.abs(f[i][0]-g[i][0])+Math.abs(f[i][1]-g[i][1])+Math.abs(f[i][2]-g[i][2])>15)changed++;
-   return {backgroundMax:max,backgroundMean:sum/(a.length*4),faceChanged:changed};
+   const geometry=IllustratedAvatar.geometry(),base=geometry.find(x=>x.name==='base');return {backgroundMax:max,backgroundMean:sum/(a.length*4),faceChanged:changed,flipped:geometry.reduce((n,l)=>n+l.flipped,0),minimumArea:base.minAreaRatio};
   });
-  assert.ok(movement.backgroundMax<=2,JSON.stringify(movement));assert.ok(movement.faceChanged>100,JSON.stringify(movement));
+  assert.ok(movement.backgroundMax<=2,JSON.stringify(movement));assert.ok(movement.faceChanged>100,JSON.stringify(movement));assert.equal(movement.flipped,0,JSON.stringify(movement));assert.ok(movement.minimumArea>=.25,JSON.stringify(movement));
   await set({yaw:0,pitch:0,roll:0,bodyFollow:0,eyeL:0,eyeR:0});await page.evaluate(()=>qCapture('closed'));await shot('closed');
   const eyes=await page.evaluate(()=>[qSource.binding.eye0,qSource.binding.eye1].map(e=>{
    const rect=[e.x-2,e.y-3,e.w+4,e.h+7],open=qRegion('neutral',rect),closed=qRegion('closed',rect),bright=p=>p[0]>225&&p[1]>225&&p[2]>225,dark=p=>p[0]<135&&p[1]<120&&p[2]<110;
