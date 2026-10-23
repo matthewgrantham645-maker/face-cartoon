@@ -2,6 +2,7 @@
 import argparse
 import base64
 import binascii
+import gzip
 import json
 import math
 import os
@@ -9,6 +10,7 @@ import re
 import threading
 import urllib.error
 import urllib.request
+import zlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -26,7 +28,7 @@ MAX_STYLES = 80
 STYLES_PATH = ROOT / "data" / "selfie-styles.json"
 BUILTIN_STYLE_IDS = {"crayon-journal", "ghibli", "simpsons", "pixar", "disney", "dragon-ball", "shin-chan", "conan", "snoopy", "clay", "lego", "pixel", "low-poly", "y2k", "ins-minimal", "ukiyo-e", "southeast-asia", "oil-paint", "hand-drawn", "sketch", "watercolor"}
 STYLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
-MAX_RESULT = 8 * 1024 * 1024
+MAX_RESULT = 20 * 1024 * 1024
 NUMBERS = {"hairVolume": (.8, 1.4), "faceWidth": (.82, 1.2), "jawWidth": (.75, 1.18),
            "faceLength": (.86, 1.15), "eyeSize": (.7, 1.4), "eyeSpacing": (.85, 1.2), "browThickness": (.7, 1.5)}
 
@@ -238,11 +240,23 @@ def result_image_url(content):
     return https[-1]
 
 
+def image_data_url(data):
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        mime = "image/png"
+    elif data.startswith(b"\xff\xd8\xff"):
+        mime = "image/jpeg"
+    elif len(data) >= 12 and data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        mime = "image/webp"
+    else:
+        raise RuntimeError("生成图不是可用的图片。")
+    return "data:%s;base64,%s" % (mime, base64.b64encode(data).decode("ascii"))
+
+
 def result_png(url):
     if not allowed_result_url(url):
         host = urlparse(url).hostname or urlparse(url).scheme or "未知"
         raise RuntimeError("生成结果的图片地址不在预期的阿里云域名上（%s），已拒绝下载。" % host)
-    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "image/png,image/*;q=0.8"})
+    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "image/png,image/jpeg,image/webp,image/*;q=0.8"})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             final = response.geturl() if hasattr(response, "geturl") else url
@@ -250,13 +264,26 @@ def result_png(url):
                 host = urlparse(final).hostname or "未知"
                 raise RuntimeError("生成结果的图片地址不在预期的阿里云域名上（%s），已拒绝下载。" % host)
             data = response.read(MAX_RESULT + 1)
+            headers = getattr(response, "headers", None)
+            encoding = headers.get("Content-Encoding") if headers is not None and hasattr(headers, "get") else ""
     except RuntimeError:
         raise
     except (urllib.error.URLError, TimeoutError, OSError):
         raise RuntimeError("生成图已返回，但下载失败。请再生成一次。") from None
-    if not data.startswith(b"\x89PNG\r\n\x1a\n") or not 24 <= len(data) <= MAX_RESULT:
-        raise RuntimeError("生成图不是可用的 PNG。")
-    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+    encoding = (encoding or "").lower()
+    compressed = "gzip" in encoding or data.startswith(b"\x1f\x8b")
+    if len(data) > MAX_RESULT and not compressed:
+        raise RuntimeError("生成图太大。")
+    if compressed:
+        try:
+            data = gzip.decompress(data)
+        except (gzip.BadGzipFile, EOFError, zlib.error):
+            raise RuntimeError("生成图太大。" if len(data) > MAX_RESULT else "生成图已返回，但无法解开。") from None
+    if len(data) > MAX_RESULT:
+        raise RuntimeError("生成图太大。")
+    if len(data) < 24:
+        raise RuntimeError("生成图不是可用的图片。")
+    return image_data_url(data)
 
 
 def generate_selfie(image, prompt, model=None):

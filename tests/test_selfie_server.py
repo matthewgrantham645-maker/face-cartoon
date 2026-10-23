@@ -1,4 +1,5 @@
 import base64
+import gzip
 import io
 import json
 import os
@@ -162,6 +163,40 @@ class SelfieServerTests(unittest.TestCase):
             path.write_text("{", encoding="utf-8")
             with self.assertRaises(ValueError):
                 app.read_style_file(path)
+
+    def test_result_image_accepts_jpeg_gzip_png_and_rejects_junk(self):
+        url = "https://dashscope-a717.oss-accelerate.aliyuncs.com/a.img"
+
+        class Body:
+            def __init__(self, data, headers=None):
+                self.data = data
+                self.headers = headers or {}
+            def read(self, n=-1):
+                return self.data if n is None or n < 0 else self.data[:n]
+            def geturl(self):
+                return url
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+
+        jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 32
+        with patch.object(app.urllib.request, "urlopen", return_value=Body(jpeg)):
+            self.assertTrue(app.result_png(url).startswith("data:image/jpeg;base64,"))
+        packed = gzip.compress(PNG)
+        with patch.object(app.urllib.request, "urlopen", return_value=Body(packed, {"Content-Encoding": "gzip"})):
+            self.assertTrue(app.result_png(url).startswith("data:image/png;base64,"))
+        webp = b"RIFF" + b"\x00\x00\x00\x00" + b"WEBP" + b"\x00" * 16
+        with patch.object(app.urllib.request, "urlopen", return_value=Body(webp)):
+            self.assertTrue(app.result_png(url).startswith("data:image/webp;base64,"))
+        with patch.object(app, "MAX_RESULT", 32), patch.object(app.urllib.request, "urlopen", return_value=Body(b"\x89PNG\r\n\x1a\n" + b"0" * 40)):
+            with self.assertRaises(RuntimeError) as error:
+                app.result_png(url)
+            self.assertIn("太大", str(error.exception))
+        with patch.object(app.urllib.request, "urlopen", return_value=Body(b"<html>no</html>")):
+            with self.assertRaises(RuntimeError) as error:
+                app.result_png(url)
+            self.assertIn("不是可用的图片", str(error.exception))
 
     def test_http_styles_roundtrip(self):
         with tempfile.TemporaryDirectory() as folder:

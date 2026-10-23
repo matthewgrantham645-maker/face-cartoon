@@ -14,6 +14,7 @@
   var selected = { kind: "preset", id: L.PRESETS[0].id };
   var userStyles = [];
   var activeId = "";
+  var reviseId = "";
   var styleBusy = false;
   var stylesReady = false;
 
@@ -78,12 +79,24 @@
     return txDone(tx);
   }
 
+  function deleteShot(id) {
+    if (!db) return Promise.resolve(null);
+    var tx = db.transaction("shots", "readwrite");
+    tx.objectStore("shots").delete(id);
+    return txDone(tx);
+  }
+
+  function isImageData(value) {
+    return typeof value === "string" && /^data:image\/(png|jpeg|webp);base64,/.test(value);
+  }
+
   function sync() {
     var prompt = $("prompt").value.trim();
     $("shutter").disabled = busy || !!frozen || !prompt || !cameraReady;
     $("again").disabled = busy || !frozen || !prompt;
     $("retake").disabled = busy || !frozen;
     $("download").disabled = !resultUrl;
+    document.querySelectorAll("#history .ops button").forEach(function (button) { button.disabled = busy; });
     $("saveStyle").disabled = busy || styleBusy || !stylesReady;
     $("updateStyle").disabled = busy || styleBusy || !stylesReady || selected.kind !== "user";
     $("deleteStyle").disabled = busy || styleBusy || !stylesReady || selected.kind !== "user";
@@ -145,20 +158,34 @@
     box.replaceChildren();
     $("historyEmpty").hidden = shots.length > 0;
     shots.forEach(function (shot) {
-      var button = document.createElement("button");
-      button.type = "button";
-      button.className = "shot";
-      button.setAttribute("aria-current", shot.id === activeId ? "true" : "false");
+      var card = document.createElement("article");
+      card.className = "shot";
+      card.setAttribute("aria-current", shot.id === activeId ? "true" : "false");
+      var open = document.createElement("button");
+      open.type = "button";
+      open.className = "shot-open";
       var img = document.createElement("img");
       img.src = shot.result;
       img.alt = "";
       var caption = document.createElement("span");
       var clock = new Date(shot.created);
       caption.textContent = clock.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-      button.appendChild(img);
-      button.appendChild(caption);
-      button.addEventListener("click", function () { recall(shot); });
-      box.appendChild(button);
+      open.appendChild(img);
+      open.appendChild(caption);
+      open.addEventListener("click", function () { recall(shot); });
+      var ops = document.createElement("div");
+      ops.className = "ops";
+      [["增", function () { addFrom(shot); }], ["改", function () { editShot(shot); }], ["删", function () { removeShot(shot); }]].forEach(function (item) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.textContent = item[0];
+        button.disabled = busy;
+        button.addEventListener("click", item[1]);
+        ops.appendChild(button);
+      });
+      card.appendChild(open);
+      card.appendChild(ops);
+      box.appendChild(card);
     });
   }
 
@@ -167,8 +194,9 @@
     return sessionShots().then(renderHistory);
   }
 
-  function recall(shot) {
+  function recall(shot, keepRevise) {
     if (busy) return;
+    if (!keepRevise) reviseId = "";
     frozen = shot.original;
     resultUrl = shot.result;
     activeId = shot.id;
@@ -179,6 +207,36 @@
     renderStyles();
     setStatus("");
     sync();
+    refreshHistory();
+  }
+
+  function editShot(shot) {
+    if (busy) return;
+    reviseId = shot.id;
+    recall(shot, true);
+    setStatus("正在改这一张。");
+  }
+
+  function addFrom(shot) {
+    if (busy) return;
+    frozen = shot.original;
+    showFrozen();
+    sync();
+    generate({ original: shot.original, prompt: shot.prompt, replaceId: "" });
+  }
+
+  function removeShot(shot) {
+    if (busy) return;
+    deleteShot(shot.id).then(function () {
+      if (activeId === shot.id) {
+        activeId = "";
+        clearResult();
+      }
+      if (reviseId === shot.id) reviseId = "";
+      return refreshHistory();
+    }).catch(function () {
+      setStatus("没能删掉。");
+    });
   }
 
   function captureFrame() {
@@ -191,34 +249,48 @@
     return canvas.toDataURL("image/jpeg", 0.85);
   }
 
-  function generate() {
-    var prompt = $("prompt").value.trim();
-    if (busy || !frozen || !prompt) return;
+  function generate(options) {
+    var manual = options && options.original;
+    var source = manual ? options.original : frozen;
+    var prompt = manual ? options.prompt : $("prompt").value.trim();
+    var replaceId = manual ? (options.replaceId || "") : (reviseId || "");
+    if (busy || !source || !prompt) return;
     busy = true;
     sync();
     setStatus("正在生成。");
-    var sent = frozen;
-    fetch("/api/selfie", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: sent, prompt: prompt }),
-      signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(150000) : undefined
-    }).then(function (response) {
-      return response.json().then(function (data) {
-        if (!response.ok) throw new Error(data && data.error ? data.error : "生成失败。");
-        if (!data || typeof data.image !== "string" || data.image.indexOf("data:image/png") !== 0) throw new Error("返回的图片无法显示。");
-        return data.image;
-      });
-    }).then(function (image) {
-      if (frozen !== sent) return;
-      resultUrl = image;
-      showResult();
-      var shot = { id: L.newId(), sessionId: sessionId, created: Date.now(), prompt: prompt, original: sent, result: image };
-      activeId = shot.id;
-      var saved = db ? saveShot(shot).catch(function () { return null; }) : Promise.resolve(null);
-      return saved.then(function (savedId) {
-        var note = !db || savedId === null ? "生成完成。记录没写入。" : "";
-        return refreshHistory().catch(function () { return null; }).then(function () { setStatus(note); });
+    var sent = source;
+    var previous = null;
+    var lookup = db ? sessionShots() : Promise.resolve([]);
+    lookup.then(function (shots) {
+      previous = shots.filter(function (shot) { return shot.id === replaceId; })[0] || null;
+    }).catch(function () {
+      previous = null;
+    }).then(function () {
+      return fetch("/api/selfie", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: sent, prompt: prompt }),
+        signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(150000) : undefined
+      }).then(function (response) {
+        return response.json().then(function (data) {
+          if (!response.ok) throw new Error(data && data.error ? data.error : "生成失败。");
+          if (!isImageData(data && data.image)) throw new Error("返回的图片无法显示。");
+          return data.image;
+        });
+      }).then(function (image) {
+        if (frozen !== sent) return;
+        resultUrl = image;
+        showResult();
+        var shot = replaceId
+          ? { id: replaceId, sessionId: sessionId, created: previous ? previous.created : Date.now(), prompt: prompt, original: previous ? previous.original : sent, result: image }
+          : { id: L.newId(), sessionId: sessionId, created: Date.now(), prompt: prompt, original: sent, result: image };
+        activeId = shot.id;
+        if (replaceId) reviseId = "";
+        var saved = db ? saveShot(shot).catch(function () { return null; }) : Promise.resolve(null);
+        return saved.then(function (savedId) {
+          var note = !db || savedId === null ? "生成完成。记录没写入。" : "";
+          return refreshHistory().catch(function () { return null; }).then(function () { setStatus(note); });
+        });
       });
     }).catch(function (error) {
       var timedOut = error && (error.name === "TimeoutError" || error.name === "AbortError");
@@ -245,6 +317,7 @@
       return;
     }
     activeId = "";
+    reviseId = "";
     showFrozen();
     sync();
     generate();
@@ -254,6 +327,7 @@
     if (busy || !frozen) return;
     frozen = "";
     activeId = "";
+    reviseId = "";
     clearResult();
     showLive();
     renderHistoryFromCache();
@@ -264,7 +338,8 @@
     if (!resultUrl) return;
     var link = document.createElement("a");
     link.href = resultUrl;
-    link.download = "自拍.png";
+    var kind = resultUrl.indexOf("data:image/jpeg") === 0 ? "jpg" : resultUrl.indexOf("data:image/webp") === 0 ? "webp" : "png";
+    link.download = "自拍." + kind;
     document.body.appendChild(link);
     link.click();
     link.remove();

@@ -61,15 +61,24 @@
     .save-row button { display: inline-flex; align-items: center; gap: 6px; border-color: var(--line); background: #fff; color: var(--ink); }
     .save-row svg { display: block; }
     .strip { display: flex; gap: 10px; overflow-x: auto; min-height: 92px; }
-    .shot { flex: 0 0 132px; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
+    .records { margin-top: 16px; }
+    .gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; max-height: 460px; overflow-x: hidden; overflow-y: auto; }
+    .shot { min-width: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
+    .shot-open { display: block; width: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: left; }
     .shot img { width: 100%; aspect-ratio: 16/9; object-fit: cover; background: var(--paper); display: block; }
-    .shot span { display: block; padding: 4px 8px 6px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .shot span { display: block; padding: 4px 8px 0; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
     .shot[aria-current="true"] { border-color: var(--blue); }
-    #historyEmpty { margin: 0; color: var(--muted); font-size: 13px; }
+    .ops { display: flex; gap: 4px; padding: 4px 6px 8px; }
+    .ops button { padding: 2px 8px; color: var(--muted); }
+    .ops button:hover:not(:disabled) { color: var(--ink); }
+    #historyEmpty { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
     @media (max-width: 860px) {
       main { padding: 18px 14px 36px; }
       .compare, .below { grid-template-columns: 1fr; }
       button.primary { width: 72px; height: 72px; }
+    }
+    @media (max-width: 640px) {
+      .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   </style>
 </head>
@@ -123,12 +132,12 @@
           </div>
         </details>
       </section>
-      <section class="editor">
-        <h2>本次记录</h2>
-        <div id="history" class="strip"></div>
-        <p id="historyEmpty">还没有</p>
-      </section>
     </div>
+    <section class="editor records">
+      <h2>本次记录</h2>
+      <div id="history" class="gallery"></div>
+      <p id="historyEmpty">还没有</p>
+    </section>
   </main>
   <script src="./library.js"></script>
   <script src="./app.js"></script>
