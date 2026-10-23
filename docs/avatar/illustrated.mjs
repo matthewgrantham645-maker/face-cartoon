@@ -1,10 +1,10 @@
-import {loadMeshAvatar,DEFAULT_LIGHTING} from './vendor/mesh-avatar-0.2.1.mjs';
+import {loadMeshAvatar,DEFAULT_LIGHTING} from './vendor/mesh-avatar-0.2.1.mjs?v=9';
 
-// The upstream runtime is vendored unchanged. This adapter owns loading,
+// The runtime includes documented portrait-only patches. This adapter owns loading,
 // frame pacing, local imports and the existing application's pose conversion.
 const $=id=>document.getElementById(id),canvas=$('meshCanvas'),poster=$('artPoster');
 let avatar=null,loading=false,serial=0,lastDraw=0,reportAt=performance.now(),frames=0,cost=0;
-const state={apiVersion:1,active:false,canvas,ready:false,loading:false,name:'二维插画',frameRate:30,portrait:null,lastError:''};
+const state={apiVersion:2,active:false,canvas,ready:false,loading:false,name:'二维插画',frameRate:30,portrait:null,lastError:''};
 window.IllustratedAvatar=state;
 const message=text=>$('meshStatus').textContent=text;
 const notify=()=>window.dispatchEvent(new Event('avatar-renderer-change'));

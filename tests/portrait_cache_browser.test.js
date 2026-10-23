@@ -36,7 +36,7 @@ const root=path.resolve(__dirname,'..'),port=18773;
   await page.locator('#applyPortrait').click();await page.waitForFunction(()=>document.querySelector('#portraitActionStatus').textContent.includes('版本不一致'),{timeout:10000});
   assert.equal(await page.locator('#retryPortraitVersion').isVisible(),true);
   assert.equal(await page.evaluate(()=>IllustratedAvatar.name),'after-cache');
-  await page.locator('#retryPortraitVersion').click();await page.waitForURL('**/avatar/?portrait=*&v=8.1');
+  await page.locator('#retryPortraitVersion').click();await page.waitForURL('**/avatar/?portrait=*&v=9');
   await page.waitForFunction(()=>PortraitDiagnostics.snapshot().binding&&IllustratedAvatar.ready);
   assert.equal(await page.evaluate(()=>PortraitDiagnostics.snapshot().binding.mouth.x),edited);
   assert.equal(await page.evaluate(()=>typeof IllustratedAvatar.load),'function');
