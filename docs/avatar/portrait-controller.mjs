@@ -1,9 +1,20 @@
-import {decodePortrait,defaultBinding,normalizeBinding,bindingFromLandmarks,buildPortrait} from './portrait-rig.mjs';
+import {decodePortrait,defaultBinding,normalizeBinding,bindingFromLandmarks,buildPortrait} from './portrait-rig.mjs?v=8.1';
 const $=id=>document.getElementById(id),Store=window.PortraitStore;
 let source=null,binding=null,record=null,name='',revision=0,edited=0,building=false,detecting=false,queuedDetection=0,drag=null,archive=null,appliedBinding=null;
 const colors={head:'#ad70ed',eye0:'#2879ef',eye1:'#17a485',mouth:'#e86e49'};
 const labels={head:'头部',eye0:'画面左眼',eye1:'画面右眼',mouth:'嘴部'};
-const say=text=>$('portraitStatus').textContent=text;
+const say=text=>{ $('portraitStatus').textContent=text; $('portraitActionStatus').textContent=text; };
+async function rendererReady(){
+  if(typeof window.IllustratedAvatar?.load==='function')return window.IllustratedAvatar;
+  return new Promise((resolve,reject)=>{
+    let poll,timer;
+    const cleanup=()=>{clearInterval(poll);clearTimeout(timer);window.removeEventListener('avatar-renderer-ready',check);};
+    const check=()=>{if(typeof window.IllustratedAvatar?.load==='function'){cleanup();resolve(window.IllustratedAvatar);}};
+    window.addEventListener('avatar-renderer-ready',check);poll=setInterval(check,50);
+    timer=setTimeout(()=>{cleanup();const error=Error('页面的二维渲染模块版本不一致，请保存绑定并刷新页面。');error.code='RENDERER_VERSION';reject(error);},4000);
+    check();
+  });
+}
 function sync(){
   const disabled=building||!source;
   for(const id of ['applyPortrait','portraitFeature','portraitX','portraitY','portraitWidth','portraitHeight'])$(id).disabled=disabled;
@@ -23,7 +34,7 @@ function changeBox(key,next){
 }
 async function showRecord(shot,{auto=true}={}){
   if(building)return;const token=++revision;edited=0;source=null;binding=null;archive=null;appliedBinding=null;record=shot;name=shot.styleName||shot.sourceName||'我的图片';sync();
-  $('portraitEditor').hidden=false;$('portraitTitle').textContent='确认五官 · '+name;say('正在准备图片…');
+  $('portraitEditor').hidden=false;$('retryPortraitVersion').hidden=true;$('portraitTitle').textContent='确认五官 · '+name;say('正在准备图片…');
   try{
     const image=await decodePortrait(shot.result);if(token!==revision)return;source=image;
     try{binding=shot.portraitBinding?normalizeBinding(shot.portraitBinding,image.width,image.height):defaultBinding(image.width,image.height);}catch{binding=defaultBinding(image.width,image.height);}
@@ -45,17 +56,21 @@ async function detect(){
 }
 async function apply(){
   if(!source||building)return;let valid;try{valid=normalizeBinding(binding,source.width,source.height);}catch(error){say(error.message);return;}
-  const token=revision,shot=record;edited++;building=true;sync();say('正在从这张图片构建眼睛纹理与变形网格…');
+  const token=revision,shot=record;edited++;building=true;sync();$('retryPortraitVersion').hidden=true;say('正在检查二维渲染器…');
   try{
+    const renderer=await rendererReady();
+    say('正在从这张图片构建眼睛纹理与变形网格…');
     const built=await buildPortrait(source,valid,name);if(token!==revision)return;
-    if(!window.IllustratedAvatar?.load)throw Error('二维渲染器尚未就绪，请稍后重试。');
-    const ok=await window.IllustratedAvatar.load(new Blob([built.archive],{type:'application/zip'}),name,{id:shot.id,method:valid.method,binding:built.binding});
-    if(!ok)throw Error('渲染器加载失败，请查看二维角色状态。');
+    const ok=await renderer.load(new Blob([built.archive],{type:'application/zip'}),name,{id:shot.id,method:valid.method,binding:built.binding});
+    if(!ok)throw Error(renderer.lastError||'渲染器加载失败，请查看二维角色状态。');
     archive=built.archive;appliedBinding=built.binding;binding=built.binding;
     try{if(!await Store.saveBinding(shot.id,built.binding))throw Error();say('已应用到左侧角色。先点“自动演示”查看效果，再开启面捕；这张图片的绑定已保存。');}
     catch{say('已应用到左侧角色，可以面捕。本地记录未能保存，请导出 .mavatar 留存。');}
     draw();
-  }catch(error){say('绑定未完成：'+error.message+' 请检查位置后重试。');}
+  }catch(error){
+    $('retryPortraitVersion').hidden=error.code!=='RENDERER_VERSION';
+    say('绑定未完成：'+error.message+(error.code==='RENDERER_VERSION'?' 五官位置无需重新调整。':' 请检查提示后重试。'));
+  }
   finally{building=false;sync();}
 }
 async function gallery(){
@@ -80,6 +95,14 @@ async function importFile(file){
   finally{URL.revokeObjectURL(url);}
 }
 $('pickPortrait').onclick=gallery;$('refreshPortraits').onclick=gallery;$('detectPortrait').onclick=detect;$('applyPortrait').onclick=apply;
+$('retryPortraitVersion').onclick=async()=>{
+  if(!record||!source||building)return;
+  try{
+    const saved=normalizeBinding(binding,source.width,source.height);
+    if(!await Store.saveBinding(record.id,saved))await Store.put({...record,portraitBinding:saved});
+    const url=new URL(location.href);url.searchParams.set('portrait',record.id);url.searchParams.set('v','8.1');location.replace(url.href);
+  }catch(error){say('未能保存绑定，暂未刷新。请保留当前页面，稍后重试：'+error.message);}
+};
 $('cancelPortrait').onclick=()=>{if(building)return;revision++;$('portraitEditor').hidden=true;};
 $('portraitFeature').onchange=()=>{syncFields();draw();};
 for(const [id,key,axis]of [['portraitX','x','width'],['portraitY','y','height'],['portraitWidth','w','width'],['portraitHeight','h','height']])$(id).oninput=()=>{if(!source||building)return;changeBox($('portraitFeature').value,{[key]:Number($(id).value)/1000*source[axis]});};

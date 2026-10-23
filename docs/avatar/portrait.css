@@ -4,3 +4,5 @@
 #portraitEditorCanvas{display:block;max-width:100%;height:auto;margin:12px auto;max-height:550px;object-fit:contain;background:#eee;border-radius:8px;touch-action:none;cursor:move}
 .portrait-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}.portrait-fields label{font-size:12px;color:#65758d;min-width:0}.portrait-fields input{display:block;width:100%;accent-color:#285ee4}.portrait-panel .head{gap:8px;flex-wrap:wrap}#portraitFeature{max-width:170px}.portrait-panel button{font-size:12px}#portraitStatus{min-height:2em;overflow-wrap:anywhere}
 @media(max-width:760px){.portrait-panel{padding:10px}#portraitEditorCanvas{max-height:none;width:100%}.portrait-gallery{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+.portrait-notice{font-size:12px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;background:#edf3ff;border-radius:8px;padding:10px;margin:12px 0 6px;color:#3e5c87}.portrait-notice:empty{display:none}

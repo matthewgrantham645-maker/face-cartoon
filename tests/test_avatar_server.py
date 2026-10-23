@@ -62,9 +62,14 @@ class AvatarServerTests(unittest.TestCase):
                 with urllib.request.urlopen(url + "/api/status") as response:
                     self.assertEqual(json.load(response), {"configured": False, "selfie": False})
                 with urllib.request.urlopen(url + "/avatar/") as response:
-                    self.assertIn("vendor/kalidokit.umd.js", response.read().decode())
+                    page = response.read().decode()
+                    self.assertIn("vendor/kalidokit.umd.js", page)
+                    self.assertIn("illustrated.mjs?v=8.1", page)
+                    self.assertIn("portrait-controller.mjs?v=8.1", page)
+                    self.assertEqual(response.headers.get("Cache-Control"), "no-cache")
                 with urllib.request.urlopen(url + "/avatar/illustrated.mjs") as response:
                     self.assertEqual(response.headers.get_content_type(), "text/javascript")
+                    self.assertEqual(response.headers.get("Cache-Control"), "no-cache")
                     self.assertIn("loadMeshAvatar", response.read().decode())
                 with patch.object(app, "load_live2d_core", return_value=b"/* official Core fixture */") as loader:
                     with urllib.request.urlopen(url + "/api/live2d-core.js") as response:
@@ -97,3 +102,4 @@ class AvatarServerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

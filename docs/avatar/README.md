@@ -75,6 +75,16 @@ python run_avatar.py
 
 素材制作与上游来源见 `character/ASSET_NOTES.md` 和 `vendor/README-mesh-avatar.md`。`tools/mesh-avatar/build-layers.py` 是离线素材处理工具，需要 Pillow、NumPy、OpenCV；运行本页面不需要安装这些依赖。
 
+## 第八版修订：绑定后没有替换角色
+
+已复现：新绑定界面配上浏览器缓存的旧 `illustrated.mjs` 时，旧模块仍能绘制示例，却没有 `IllustratedAvatar.load()`，点击确认报“二维渲染器尚未就绪”，导出也无法启用。这是脚本版本混用，与照片画风或 API 密钥无关。
+
+- 面捕页的应用脚本、样式和绑定模块使用统一的 `v=8.1` 资源地址；本机服务对静态资源发送 `Cache-Control: no-cache`，更新后重新验证。
+- 绑定前等待渲染入口就绪。旧模块缺少入口时，显示版本问题，提供“保存绑定并刷新页面”，按记录保存当前校正位置后重新打开。
+- 绑定进度与错误同时显示在确认按钮旁；渲染器的具体加载错误直接显示，避免用户只能看见按钮禁用。
+
+更新并重启 `python run_avatar.py` 后，在面捕页按 Ctrl+F5；可以直接重选已有图片，无须重新生图。缓存回归检查：`node tests/portrait_cache_browser.test.js`，需要 Playwright 和 Chromium（可用 `CHROME_PATH` 指定）。
+
 ## 照片生图（第七版）
 
 访问 http://localhost:8000/selfie/ ，或在主页选择「照片生图 · 24 种风格」。默认上传模式不请求摄像头权限。

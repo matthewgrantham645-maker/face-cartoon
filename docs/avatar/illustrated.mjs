@@ -4,7 +4,7 @@ import {loadMeshAvatar,DEFAULT_LIGHTING} from './vendor/mesh-avatar-0.2.1.mjs';
 // frame pacing, local imports and the existing application's pose conversion.
 const $=id=>document.getElementById(id),canvas=$('meshCanvas'),poster=$('artPoster');
 let avatar=null,loading=false,serial=0,lastDraw=0,reportAt=performance.now(),frames=0,cost=0;
-const state={active:false,canvas,ready:false,loading:false,name:'二维插画',frameRate:30,portrait:null};
+const state={apiVersion:1,active:false,canvas,ready:false,loading:false,name:'二维插画',frameRate:30,portrait:null,lastError:''};
 window.IllustratedAvatar=state;
 const message=text=>$('meshStatus').textContent=text;
 const notify=()=>window.dispatchEvent(new Event('avatar-renderer-change'));
@@ -23,7 +23,7 @@ function select(){
   lastDraw=0;frames=0;reportAt=performance.now();notify();
 }
 async function load(source,name,portrait=null){
-  const ticket=++serial;loading=true;state.loading=true;
+  const ticket=++serial;loading=true;state.loading=true;state.lastError='';
   message('正在加载二维角色与网格…');
   try{
     const next=await loadMeshAvatar(canvas,source,{manual:true});
@@ -36,6 +36,7 @@ async function load(source,name,portrait=null){
     return true;
   }catch(error){
     if(ticket!==serial)return;
+    state.lastError=error.message;
     message('二维角色加载失败：'+error.message+(avatar?'，继续保留当前角色。':'。已切到参数角色，可继续使用面捕。'));
     if(!avatar){$('renderMode').value='parameter';select();}
     console.error(error);return false;
@@ -55,6 +56,7 @@ state.update=(pose,now)=>{
   if(now-reportAt>=1500){$('renderStats').textContent=Math.round(frames*1000/(now-reportAt))+' 帧/秒 · 提交约 '+cost.toFixed(1)+' ms/帧';frames=0;reportAt=now;}
 };
 state.load=load;
+window.dispatchEvent(new Event('avatar-renderer-ready'));
 state.useParameters=()=>{$('renderMode').value='parameter';select();};
 $('renderMode').addEventListener('change',select);
 $('renderFPS').addEventListener('change',()=>{state.frameRate=Number($('renderFPS').value);lastDraw=0;});

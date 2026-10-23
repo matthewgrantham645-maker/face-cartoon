@@ -249,6 +249,13 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT / "docs"), **kwargs)
 
+    def end_headers(self):
+        # Local updates must revalidate HTML and modules as one application.
+        # Otherwise the new binding UI can reuse an old renderer without load().
+        if self.command in ("GET", "HEAD") and not urlparse(self.path).path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def allowed_origin(self):
         expected = "127.0.0.1:%s" % self.server.server_address[1]
         local = "localhost:%s" % self.server.server_address[1]
