@@ -33,6 +33,11 @@
     .sample-paper b { position: absolute; left: 16px; bottom: 16px; color: #8a6a45; font-size: 13px; font-weight: 600; }
     .copy { padding: 18px 20px 20px; }
     .copy strong { font-size: 26px; font-weight: 650; }
+    .hall-door { grid-column: 1 / -1; flex-direction: row; align-items: stretch; min-height: 168px; }
+    .hall-faces { flex: 0 0 240px; width: 240px; background: var(--paper); }
+    .hall-faces img { width: 100%; height: 100%; object-fit: cover; object-position: center 12%; display: block; }
+    .hall-copy { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+    .hall-names { color: var(--muted); font-size: 15px; }
     @media (prefers-reduced-motion: no-preference) {
       .door { transition: transform .18s ease, border-color .18s ease; }
       .door:hover { transform: translateY(-2px); border-color: #cfcabe; }
@@ -42,6 +47,8 @@
       .brand { font-size: 24px; }
       .doors { grid-template-columns: 1fr; }
       .portrait, .sample { height: 280px; }
+      .hall-door { flex-direction: column; }
+      .hall-faces { width: 100%; height: 180px; flex-basis: auto; }
     }
   </style>
 </head>
@@ -71,6 +78,10 @@
           </span>
         </span>
         <span class="copy"><strong>照片生图 · 24 种风格</strong></span>
+      </a>
+      <a class="door hall-door" href="/hall/">
+        <span class="hall-faces"><img src="../avatar/character/source.png" alt=""></span>
+        <span class="copy hall-copy"><strong>语音厅状态</strong><span class="hall-names">点击进入 · 说话 · 倾听 · 欢迎 · 感谢 · 演唱 · 离开</span></span>
       </a>
     </nav>
   </main>

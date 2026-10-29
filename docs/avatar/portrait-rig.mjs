@@ -1,7 +1,7 @@
 // Browser-side base rig for a single portrait; original image textures are retained.
 // Geometry targets the existing MIT mesh-avatar runtime; it does not create Cubism files.
-import {packAvatar,validateRig} from './vendor/mesh-avatar-0.2.1.mjs?v=11';
-import {normalizeMotion} from './portrait-motion.mjs?v=11';
+import {packAvatar,validateRig} from './vendor/mesh-avatar-0.2.1.mjs?v=12';
+import {normalizeMotion} from './portrait-motion.mjs?v=12';
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const ellipse=(cx,cy,rx,ry)=>({cx,cy,rx:Math.max(1,rx),ry:Math.max(1,ry)});
 const clone=value=>JSON.parse(JSON.stringify(value));

@@ -7,7 +7,8 @@
   let appearance=A.sanitize(),mode='manual',target=A.neutral(),shown=A.neutral(),stream=null,tracker=null,loadPromise=null;
   let lastTick=performance.now(),lastUI=0,startAt=0,lastSent=0,lastVideo=-1,lastFace=0;
   let latestPoints=null,pendingFrame=null,purpose='live',frameResult=null,starting=false,generating=false,epoch=0;
-  let calibrating=false,frameCount=0,lastReport=0,inferenceMS=0,inputCount=0,poseSequence=0;
+  let calibrating=false,frameCount=0,lastReport=0,inferenceMS=0,inputCount=0,poseSequence=0,captureEngine='mesh',lastBlendStamp=0;
+  const blendFilters={};
   const motion=new AvatarMotion.MotionDriver(),mouthDriver=new AvatarFaceResponse.MouthDriver(),presence=new AvatarMotion.FacePresence();
   let previewFactory=null,presenceState='lost';
   let pendingAppearance=null,pendingOrigin='';
@@ -29,7 +30,41 @@
     $('mouthGain').disabled=false;
     $('profileHelp').textContent=official?'KalidoKit 姿态与眼睛映射，下方可启用小幅张嘴增强。灵敏度对两种映射均生效；闭嘴不归零时点“校准闭嘴”。':'个人校准：开启后保持正面、睁眼、闭嘴约 1–2 秒；可独立调整张嘴灵敏度。';
   }
-  function calibrate(){motion.beginCalibration();presence.reset();calibrating=!isOfficial();target=A.neutral();profileControls();say(calibrating?'正在校准：请正视镜头、睁眼、闭嘴约 1–2 秒。':'参考官方映射已接入 · 可以眨眼、说话、转头和移动视线。');}
+  function resetBlendFilters(){for(const key in blendFilters)blendFilters[key].reset();}
+  function smoothBlend(pose,now){
+    const out={};
+    for(const key of Object.keys(A.neutral())){
+      if(!blendFilters[key]){
+        const fast=key.startsWith('eye')||key==='smile'||key==='pucker'||key==='squint'||key.startsWith('brow');
+        blendFilters[key]=new AvatarMotion.OneEuro(fast?6:key==='mouth'?4:1.6,fast?.7:.3);
+      }
+      let value=blendFilters[key].update(pose[key],now);
+      if((key==='eyeL'||key==='eyeR')&&pose[key]<.04){value=0;blendFilters[key].value=0;}
+      out[key]=value;
+    }
+    return A.pose(out);
+  }
+  async function ensureLandmarker(){
+    if(!window.AvatarLandmarkerExpected)return null;
+    const start=performance.now();
+    while(!window.AvatarLandmarker&&performance.now()-start<2500)await new Promise(resolve=>setTimeout(resolve,50));
+    if(!window.AvatarLandmarker?.create)return null;
+    try{return await Promise.race([window.AvatarLandmarker.create(),new Promise((_,reject)=>setTimeout(()=>reject(Error('混合形状模型加载超时')),20000))]);}
+    catch(error){console.warn(error);return null;}
+  }
+  function applyBlend(result,now){
+    const size={width:video.videoWidth,height:video.videoHeight};
+    const points=result.landmarks.map(p=>({x:p.x,y:p.y,z:Number.isFinite(p.z)?p.z:0}));
+    const solved=points.length===478?A.solveFace(points.map(p=>({...p})),size,Kalidokit):null;
+    const expr=window.AvatarBlend.expressionFromBlendshapes(result.blendshapes);
+    const base=solved&&[solved.head?.x,solved.head?.y,solved.head?.z,solved.mouth?.x,solved.mouth?.y].every(Number.isFinite)?AvatarKalido.fromKalido(solved):{...A.neutral(),...target};
+    const detected=mouthDriver.update(points,size,base.mouth,Number($('mouthGain').value),$('sensitiveMouth').checked);
+    target=smoothBlend(A.pose({...base,eyeL:expr.eyeL,eyeR:expr.eyeR,smile:expr.smile,pucker:expr.pucker,brow:expr.brow,browL:expr.browL,browR:expr.browR,squint:expr.squint,gazeX:expr.gazeX,gazeY:expr.gazeY,mouth:Math.max(detected,expr.jaw)}),now);
+    presence.accept(target,now);presenceState='tracking';lastFace=now;frameCount++;inputCount++;calibrating=false;
+  }
+  function calibrate(){motion.beginCalibration();presence.reset();
+    if(captureEngine==='blend'){calibrating=false;resetBlendFilters();profileControls();const kind=window.AvatarLandmarker?.describe?.()||'';say('混合形状面捕'+(kind?'（'+kind+'）':'')+' · 可以微笑、挑眉、眨眼、说话和转头。闭嘴不归零时点“校准闭嘴”。');return;}
+    calibrating=!isOfficial();target=A.neutral();profileControls();say(calibrating?'正在校准：请正视镜头、睁眼、闭嘴约 1–2 秒。':'参考官方映射已接入 · 可以眨眼、说话、转头和移动视线。');}
   function receive(results){
     frameResult=results.multiFaceLandmarks?.[0]||null;
     if(purpose!=='live'||!stream)return;
@@ -97,13 +132,15 @@
     if(starting)return;if(generating){say('正在定位图片或准备照片，请稍候再开启面捕。');return;}if(stream){setMode('camera');calibrate();updateEngine();return;}
     starting=true;$('camera').disabled=true;const token=++epoch;say('正在加载面捕组件并请求摄像头…');
     try{
-      await loadTracker();if(token!==epoch)return;
+      const landmarker=await ensureLandmarker();if(token!==epoch)return;
+      captureEngine=landmarker?'blend':'mesh';if(captureEngine==='mesh')await loadTracker();else if(!window.Kalidokit?.Face)throw Error('KalidoKit 未加载，请重新更新仓库。');
+      if(token!==epoch)return;
       if(!navigator.mediaDevices?.getUserMedia)throw Error('请通过 localhost 打开页面并允许摄像头权限。');
       const acquired=await navigator.mediaDevices.getUserMedia({audio:false,video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}}});
       if(token!==epoch){acquired.getTracks().forEach(t=>t.stop());return;}stream=acquired;for(const track of acquired.getVideoTracks?.()||[])track.addEventListener('ended',()=>{if(stream===acquired){stop();say('摄像头连接已断开，请重新选择或连接设备后开启面捕。');}},{once:true});video.srcObject=stream;await video.play();
       if(token!==epoch)return;
       $('capture').disabled=$('calibrate').disabled=$('stop').disabled=false;lastVideo=-1;lastFace=performance.now();frameCount=0;lastReport=lastFace;
-      setMode('camera');calibrate();updateEngine();
+      setMode('camera');calibrate();if(captureEngine==='mesh'&&window.AvatarLandmarkerExpected)say('混合形状暂不可用，继续使用原来的眼、嘴和转头跟踪。');updateEngine();
     }catch(error){stop();setMode('manual');say(error.name==='NotAllowedError'?'摄像头权限未获允许，可先使用自动演示。':error.message);console.error(error);}finally{starting=false;$('camera').disabled=false;}
   }
   function snapshot(source){const out=document.createElement('canvas');const iw=source.videoWidth||source.naturalWidth||source.width,ih=source.videoHeight||source.naturalHeight||source.height;
@@ -141,27 +178,32 @@
     if(mode==='preview'&&previewFactory)target=A.pose(previewFactory((now-startAt)/1000));
     if(mode==='demo'){
       const t=(now-startAt)/1000,blink=Math.exp(-Math.pow(((t%3.2)-.8)/.065,2));
-      target=A.pose({eyeL:1-blink,eyeR:1-blink,mouth:Math.max(0,Math.sin(t*5))*.8,smile:.35,yaw:Math.sin(t*.9)*.72,pitch:Math.sin(t*.63)*.35,roll:Math.sin(t*.75)*.28,gazeX:Math.sin(t*1.2)*.6,gazeY:Math.sin(t*.7)*.25,brow:Math.max(0,Math.sin(t*.8))*.3,pucker:Math.max(0,Math.sin(t*3))*.5});
+      target=A.pose({eyeL:1-blink,eyeR:1-blink,mouth:Math.max(0,Math.sin(t*5))*.8,smile:.2+Math.max(0,Math.sin(t*.7))*.7,yaw:Math.sin(t*.9)*.72,pitch:Math.sin(t*.63)*.35,roll:Math.sin(t*.75)*.28,gazeX:Math.sin(t*1.2)*.6,gazeY:Math.sin(t*.7)*.25,brow:.2+Math.max(0,Math.sin(t*.8))*.65,pucker:Math.max(0,Math.sin(t*3))*.35});
     }
     if(stream&&!generating&&!document.hidden){
       if(mode==='camera'&&!calibrating){const recovery=presence.sample(now);target=recovery.pose;presenceState=recovery.state;if(recovery.age>1600)say('暂未看清人脸，角色已平滑回到中性表情。请面对镜头。');}
       // Do not wait for currentTime to change. Some local cameras keep it at 0,
       // which previously froze the character after the first frame.
       if(mode==='camera'&&!pendingFrame&&video.readyState>=2&&video.videoWidth>0&&now-lastSent>=1000/Number($('captureRate').value)){
-        lastSent=now;lastVideo=video.currentTime;
-        const sentEpoch=epoch,work=send(video,'live').catch(error=>{if(sentEpoch===epoch){stop();say('面捕失败：'+error.message);console.error(error);}}).finally(()=>{if(pendingFrame===work)pendingFrame=null;});pendingFrame=work;
+        lastSent=now;lastVideo=video.currentTime;const sentEpoch=epoch;
+        const work=(captureEngine==='blend'?Promise.resolve().then(()=>{
+          if(sentEpoch!==epoch)return;const stamp=Math.max(Math.round(now),lastBlendStamp+1);lastBlendStamp=stamp;const started=performance.now();
+          const result=window.AvatarLandmarker.detectVideo(video,stamp);
+          inferenceMS=inferenceMS?inferenceMS*.85+(performance.now()-started)*.15:performance.now()-started;
+          if(result)applyBlend(result,performance.now());
+        }):send(video,'live')).catch(error=>{if(sentEpoch===epoch){stop();say('面捕失败：'+error.message);console.error(error);}}).finally(()=>{if(pendingFrame===work)pendingFrame=null;});pendingFrame=work;
       }
-      if(mode==='camera'&&!calibrating&&now-lastFace<700&&now-lastReport>2000){say('面捕驱动中 · '+Math.round(frameCount*1000/(now-lastReport))+' 次/秒 · 处理约 '+Math.round(inferenceMS)+' ms/帧');frameCount=0;lastReport=now;}
+      if(mode==='camera'&&!calibrating&&now-lastFace<700&&now-lastReport>2000){say((captureEngine==='blend'?'混合形状':'面捕')+'驱动中 · '+Math.round(frameCount*1000/(now-lastReport))+' 次/秒 · 处理约 '+Math.round(inferenceMS)+' ms/帧');frameCount=0;lastReport=now;}
     }
     // Personal mode already uses One Euro filtering in MotionDriver. Applying
     // another interpolation here made expressions unnecessarily slow.
-    if(mode==='camera'&&!isOfficial())shown={...target};
+    if(mode==='camera'&&(captureEngine==='blend'||!isOfficial()))shown={...target};
     else for(const key in shown){const tau=mode==='camera'?(key.startsWith('eye')?20:key==='mouth'?25:40):(key.startsWith('eye')?16:key==='mouth'?35:70);shown[key]+=(target[key]-shown[key])*(1-Math.exp(-dt/tau));}
     poseSequence++;
     if(window.IllustratedAvatar?.active)window.IllustratedAvatar.update(shown,now);
     else A.render(ctx,appearance,shown,canvas.width,canvas.height);
     window.Live2DReference?.update(shown,now,poseSequence);
-    if(now-lastUI>100){if(mode!=='manual')syncPose();else for(const name of poseFields)$(name+'Value').textContent=shown[name].toFixed(2);$('motionReadout').textContent=(isOfficial()?'官方映射':'个人校准')+' · 角度 '+[shown.yaw*30,-shown.pitch*30,-shown.roll*30].map(v=>v.toFixed(1)).join(' / ')+'° · 眼睛 '+shown.eyeL.toFixed(2)+' / '+shown.eyeR.toFixed(2)+' · 张嘴 '+shown.mouth.toFixed(2)+(mode==='camera'?' · 输入距今 '+Math.round(now-lastFace)+' ms':' · 预设/手动输入');lastUI=now;}
+    if(now-lastUI>100){if(mode!=='manual')syncPose();else for(const name of poseFields)$(name+'Value').textContent=shown[name].toFixed(2);$('motionReadout').textContent=(captureEngine==='blend'&&mode==='camera'?'混合形状':isOfficial()?'官方映射':'个人校准')+' · 角度 '+[shown.yaw*30,-shown.pitch*30,-shown.roll*30].map(v=>v.toFixed(1)).join(' / ')+'° · 眼睛 '+shown.eyeL.toFixed(2)+' / '+shown.eyeR.toFixed(2)+' · 张嘴 '+shown.mouth.toFixed(2)+' · 微笑 '+shown.smile.toFixed(2)+' · 眉毛 '+shown.brow.toFixed(2)+(mode==='camera'?' · 输入距今 '+Math.round(now-lastFace)+' ms':' · 预设/手动输入');lastUI=now;}
     requestAnimationFrame(tick);
   }
   for(const name of poseFields)$(name).addEventListener('input',()=>{setMode('manual');target=A.pose({...shown,...Object.fromEntries(poseFields.map(k=>[k,Number($(k).value)]))});updateEngine();});

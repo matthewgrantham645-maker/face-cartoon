@@ -305,11 +305,20 @@ function dn(n) {
       const he = ne * 3, oe = Math.min(2, Math.floor(he)), ke = he - oe;
       F[0] += (ee[oe][0] + (ee[oe + 1][0] - ee[oe][0]) * ke) * Q * j, F[1] += (ee[oe][1] + (ee[oe + 1][1] - ee[oe][1]) * ke) * Q * j;
     }
-    if (F[0] += (N.bunL[0] * E.bunL + N.bunR[0] * E.bunR) * j, F[1] += (N.bunL[1] * E.bunL + N.bunR[1] * E.bunR) * j, F[1] -= k.browY * 7 * E.brow, E.brow > 0.01) {
+    const browScale = n.portrait?.version === 2 ? Math.max(14, (y.ry || 300) * 0.045) : 16;
+    if (F[0] += (N.bunL[0] * E.bunL + N.bunR[0] * E.bunR) * j, F[1] += (N.bunL[1] * E.bunL + N.bunR[1] * E.bunR) * j, F[1] -= k.browY * browScale * E.brow, E.brow > 0.01) {
       const W = k.browAngle * 0.12 * E.brow;
       F[1] += (g - n.face.brow.cx) * Math.sin(W);
     }
-    F[1] += k.mouthOpen * 3.5 * E.jaw;
+    const jawScale = n.portrait?.version === 2 ? Math.max(3.5, (n.mouth?.halfLen || 0) * 0.15) : 3.5;
+    F[1] += k.mouthOpen * jawScale * E.jaw;
+    if (n.mouth?.halfLen > 0) {
+      const half = Math.max(8, n.mouth.halfLen), dx = g - n.mouth.cx, dy = A - n.mouth.cy, along = dx / half;
+      const corner = Math.exp(-((dy / (half * 0.45)) ** 2)) * Math.min(1, Math.max(0, (Math.abs(along) - 0.28) / 0.5));
+      const smile = Math.max(-1, Math.min(1, k.smile || 0)), pinch = Math.max(0, Math.min(1, k.pucker || 0));
+      F[1] -= smile * half * 0.16 * corner;
+      F[0] += (dx < 0 ? -1 : 1) * (smile * 0.08 - pinch * 0.06) * half * corner;
+    }
     const M = k.angleX / 30, R = k.angleY / 30;
     return F[0] += M * (8 * E.nose + 5 * E.mouth) + (g - n.face.eyeA.cx) * 0.12 * M * E.eyeA - (g - n.face.eyeB.cx) * 0.12 * M * E.eyeB - M * 9 * E.earR + M * 4 * E.earL - M * 10 * (E.bunL + E.bunR), F[1] -= R * (6 * E.nose + 3 * E.mouth), F[1] += (A - n.face.eyeA.cy) * -0.06 * Math.abs(R) * E.eyeA + (A - n.face.eyeB.cy) * -0.06 * Math.abs(R) * E.eyeB, I(F, E.head, k, E.turn), _(F, A, k, E.chest, E.breath, E.shoulder), F[0] = g + (F[0] - g) * (E.portrait ?? 1) * (k.deformGain ?? 1), F[1] = A + (F[1] - A) * (E.portrait ?? 1) * (k.deformGain ?? 1), F;
   }

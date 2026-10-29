@@ -1,5 +1,6 @@
 """Local avatar server. Standard library only; API credentials stay server-side."""
 import argparse
+import mimetypes
 import base64
 import binascii
 import gzip
@@ -15,11 +16,16 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
+mimetypes.add_type("application/wasm", ".wasm")
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 4 * 1024 * 1024
 CORE_URL = "https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"
 CORE_CACHE = None
 CORE_LOCK = threading.Lock()
+LANDMARKER_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+LANDMARKER_CACHE = None
+LANDMARKER_LOCK = threading.Lock()
+LOCAL_LANDMARKER = ROOT / "docs" / "avatar" / "vendor" / "face_landmarker.task"
 IMAGE_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
 IMAGE_MODELS = ("qwen-image-2.1-turbo", "qwen-image-3.0", "qwen-image-3.0-pro")
 MAX_PROMPT = 4000
@@ -52,6 +58,34 @@ def load_live2d_core():
         except (urllib.error.URLError, TimeoutError, ValueError, OSError):
             raise RuntimeError("无法从 Live2D 官方站取得 Core。请检查系统代理，或使用本地 SDK 的 Core 文件。") from None
         CORE_CACHE = data
+        return data
+
+
+def valid_landmarker(data):
+    return (isinstance(data, (bytes, bytearray)) and 500_000 <= len(data) <= 12 * 1024 * 1024
+            and data[:1] not in (b"<", b"{") and b"PK\x03\x04" in data[:16])
+
+
+def load_face_landmarker():
+    """Serve the local task file, or fetch the fixed MediaPipe model once per process."""
+    global LANDMARKER_CACHE
+    with LANDMARKER_LOCK:
+        if LANDMARKER_CACHE is not None:
+            return LANDMARKER_CACHE
+        if LOCAL_LANDMARKER.is_file():
+            data = LOCAL_LANDMARKER.read_bytes()
+            if valid_landmarker(data):
+                LANDMARKER_CACHE = data
+                return data
+        request = urllib.request.Request(LANDMARKER_URL, headers={"User-Agent": "Mozilla/5.0"})
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                data = response.read(12 * 1024 * 1024 + 1)
+            if not valid_landmarker(data):
+                raise ValueError("unexpected landmarker response")
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+            raise RuntimeError("无法取得面部混合形状模型。") from None
+        LANDMARKER_CACHE = data
         return data
 
 
@@ -365,6 +399,20 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if urlparse(self.path).path == "/api/styles":
             self.styles_get()
+            return
+        if urlparse(self.path).path == "/api/face-landmarker.task":
+            try:
+                body = load_face_landmarker()
+            except RuntimeError as error:
+                self.reply(502, {"error": str(error)})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "private, max-age=86400")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(body)
             return
         if urlparse(self.path).path == "/api/live2d-core.js":
             try:

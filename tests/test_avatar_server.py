@@ -64,8 +64,9 @@ class AvatarServerTests(unittest.TestCase):
                 with urllib.request.urlopen(url + "/avatar/") as response:
                     page = response.read().decode()
                     self.assertIn("vendor/kalidokit.umd.js", page)
-                    self.assertIn("illustrated.mjs?v=11", page)
-                    self.assertIn("portrait-controller.mjs?v=11", page)
+                    self.assertIn("illustrated.mjs?v=12", page)
+                    self.assertIn("portrait-controller.mjs?v=12", page)
+                    self.assertIn("face-landmarker.mjs?v=12", page)
                     self.assertEqual(response.headers.get("Cache-Control"), "no-cache")
                 with urllib.request.urlopen(url + "/avatar/illustrated.mjs") as response:
                     self.assertEqual(response.headers.get_content_type(), "text/javascript")
@@ -94,6 +95,33 @@ class AvatarServerTests(unittest.TestCase):
                 with self.assertRaises(urllib.error.HTTPError) as error:
                     urllib.request.urlopen(request)
                 self.assertEqual(error.exception.code, 403)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(2)
+
+
+    def test_face_landmarker_is_bounded_and_served(self):
+        blob = b"\x00\x00PK\x03\x04" + b"\x00" * 500_000
+        missing = Path("missing-face-landmarker.task")
+        with patch.object(app, "LANDMARKER_CACHE", None), patch.object(app, "LOCAL_LANDMARKER", missing), patch.object(app.urllib.request, "urlopen", return_value=io.BytesIO(blob)) as upstream:
+            self.assertEqual(app.load_face_landmarker(), blob)
+            self.assertEqual(app.load_face_landmarker(), blob)
+            self.assertEqual(upstream.call_count, 1)
+            self.assertEqual(upstream.call_args.args[0].full_url, app.LANDMARKER_URL)
+        html = b"<html>" + blob
+        with patch.object(app, "LANDMARKER_CACHE", None), patch.object(app, "LOCAL_LANDMARKER", missing), patch.object(app.urllib.request, "urlopen", return_value=io.BytesIO(html)):
+            with self.assertRaises(RuntimeError):
+                app.load_face_landmarker()
+        server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        url = "http://127.0.0.1:%s" % server.server_address[1]
+        try:
+            with patch.object(app, "load_face_landmarker", return_value=blob):
+                with urllib.request.urlopen(url + "/api/face-landmarker.task") as response:
+                    self.assertEqual(response.headers.get_content_type(), "application/octet-stream")
+                    self.assertEqual(response.read(), blob)
         finally:
             server.shutdown()
             server.server_close()

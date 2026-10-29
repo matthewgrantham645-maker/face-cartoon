@@ -4,5 +4,7 @@ data
 
 # User-provided proprietary SDK dependency; never commit credentials or Core.
 docs/avatar/vendor/live2dcubismcore.min.js
+docs/avatar/vendor/face_landmarker.task
+docs/avatar/vendor/tasks-wasm/
 __pycache__/
 .env

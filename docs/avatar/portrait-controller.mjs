@@ -1,5 +1,5 @@
-import {decodePortrait,defaultBinding,normalizeBinding,bindingFromLandmarks,buildPortrait} from './portrait-rig.mjs?v=11';
-import {normalizeMotion,previewPose} from './portrait-motion.mjs?v=11';
+import {decodePortrait,defaultBinding,normalizeBinding,bindingFromLandmarks,buildPortrait} from './portrait-rig.mjs?v=12';
+import {normalizeMotion,previewPose} from './portrait-motion.mjs?v=12';
 const $=id=>document.getElementById(id),Store=window.PortraitStore;
 let source=null,binding=null,record=null,name='',revision=0,edited=0,building=false,detecting=false,queuedDetection=0,drag=null,archive=null,appliedBinding=null,clickPoints=null;
 let history=[],redo=[],zoomRect=null;

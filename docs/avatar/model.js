@@ -11,8 +11,8 @@
     if(['rounded','round'].includes(input.glassesShape))out.glassesShape=input.glassesShape;
     return out;
   }
-  const neutral=()=>({eyeL:1,eyeR:1,mouth:0,smile:0,pucker:0,yaw:0,pitch:0,roll:0,gazeX:0,gazeY:0,brow:0,browL:0,browR:0});
-  function pose(values={}){const p=neutral();for(const key in p)if(Number.isFinite(values[key]))p[key]=clamp(values[key],['eyeL','eyeR','mouth','pucker'].includes(key)?0:-1,1);return p;}
+  const neutral=()=>({eyeL:1,eyeR:1,mouth:0,smile:0,pucker:0,yaw:0,pitch:0,roll:0,gazeX:0,gazeY:0,brow:0,browL:0,browR:0,squint:0});
+  function pose(values={}){const p=neutral();for(const key in p)if(Number.isFinite(values[key]))p[key]=clamp(values[key],['eyeL','eyeR','mouth','pucker','squint'].includes(key)?0:-1,1);return p;}
   function shade(hex,factor){return '#'+[1,3,5].map(i=>Math.round(clamp(parseInt(hex.slice(i,i+2),16)*factor,0,255)).toString(16).padStart(2,'0')).join('');}
   function render(ctx,appearance,values,w,h){
     const a=sanitize(appearance),p=pose(values);ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#fbf0d9';ctx.fillRect(0,0,w,h);

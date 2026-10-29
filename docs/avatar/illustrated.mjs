@@ -1,5 +1,5 @@
-import {loadMeshAvatar,DEFAULT_LIGHTING,unpackAvatar,packAvatar} from './vendor/mesh-avatar-0.2.1.mjs?v=11';
-import {DEFAULT_MOTION,normalizeMotion,portraitPose} from './portrait-motion.mjs?v=11';
+import {loadMeshAvatar,DEFAULT_LIGHTING,unpackAvatar,packAvatar} from './vendor/mesh-avatar-0.2.1.mjs?v=12';
+import {DEFAULT_MOTION,normalizeMotion,portraitPose} from './portrait-motion.mjs?v=12';
 
 const $=id=>document.getElementById(id),canvas=$('meshCanvas'),poster=$('artPoster');
 let avatar=null,archiveBlob=null,loading=false,serial=0,lastDraw=0,reportAt=performance.now(),frames=0,cost=0,parameters={};

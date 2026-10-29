@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>语音厅状态 · AI-FacialLab</title>
+  <style>
+    :root {
+      --canvas: #F7F6F2;
+      --ink: #050505;
+      --muted: #77736B;
+      --line: #E5E1D8;
+      --blue: #0057FF;
+      --paper: #FFF0C7;
+      --plate: #F4F1EA;
+      --shadow: 0 16px 40px rgba(28, 28, 28, .06);
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: var(--canvas); color: var(--ink); font: 16px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    main { max-width: 1120px; margin: auto; padding: 28px 32px 48px; }
+    header, .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .brand { margin: 0; font-size: 22px; font-weight: 650; }
+    .brand span { margin-left: 10px; color: var(--muted); font-size: 14px; font-weight: 450; }
+    nav { display: flex; gap: 16px; font-size: 14px; }
+    a { color: inherit; text-decoration: none; }
+    a:hover { color: var(--blue); }
+    h1 { margin: 28px 0 6px; font-size: 34px; font-weight: 650; letter-spacing: 0; }
+    .lead { margin: 0 0 22px; color: var(--muted); }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 22px; align-items: start; }
+    .stage { position: relative; background: var(--paper); border: 1px solid var(--line); border-radius: 24px; overflow: hidden; box-shadow: var(--shadow); min-height: 420px; cursor: pointer; }
+    .stage:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+    .jump { position: absolute; top: 12px; left: 12px; margin: 0; padding: 6px 10px; border-radius: 999px; background: rgba(255, 255, 255, .88); color: var(--ink); font-size: 13px; pointer-events: none; }
+    #meshCanvas { display: block; width: 100%; height: auto; max-height: 72vh; background: var(--paper); }
+    #poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--paper); }
+    #away { position: absolute; left: 16px; right: 16px; bottom: 16px; padding: 14px 16px; border-radius: 14px; background: rgba(5, 5, 5, .78); color: #fff; text-align: center; }
+    #away strong { display: block; font-size: 18px; font-weight: 650; }
+    #away span { display: block; margin-top: 4px; font-size: 13px; color: #e6e1d6; }
+    .panel { background: #fff; border: 1px solid var(--line); border-radius: 24px; padding: 18px; box-shadow: var(--shadow); }
+    .panel h2 { margin: 0 0 12px; font-size: 16px; font-weight: 650; }
+    .states { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    button, .upload { font: inherit; color: var(--ink); background: var(--plate); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+    button[aria-pressed="true"] { background: #e8efff; border-color: var(--blue); color: var(--blue); }
+    button:disabled { opacity: .45; cursor: default; }
+    button:focus-visible, a:focus-visible, .upload:focus-within { outline: 2px solid var(--blue); outline-offset: 3px; }
+    .note { min-height: 3em; margin: 14px 0 0; color: var(--blue); font-size: 14px; }
+    .picker { margin-top: 22px; }
+    .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+    .strip { display: flex; gap: 8px; overflow-x: auto; margin-top: 12px; min-height: 96px; }
+    .shot { flex: 0 0 92px; padding: 0; overflow: hidden; text-align: left; background: #fff; }
+    .shot img { display: block; width: 100%; height: 72px; object-fit: cover; background: var(--paper); }
+    .shot span { display: block; padding: 4px 6px 6px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .upload input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .fix { display: inline-block; margin-top: 10px; font-size: 13px; color: var(--blue); }
+    .small { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    @media (max-width: 800px) {
+      main { padding: 20px 16px 36px; }
+      h1 { font-size: 28px; }
+      .layout { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+      .brand span { display: block; margin: 4px 0 0; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="brand">AI-FacialLab<span>语音厅状态</span></p>
+    <nav><a href="/home/">主页</a><a href="/selfie/">照片生图</a><a href="/avatar/">实时面捕</a></nav>
+  </header>
+  <h1>语音厅状态</h1>
+  <p class="lead">选一张风格化自拍。六个状态用这张图已有的眨眼、口型和转头来播，不开摄像头。</p>
+  <div class="layout">
+    <div class="stage" id="stage" tabindex="0" role="button" aria-label="点击形象，跳到下一个状态">
+      <canvas id="meshCanvas" width="600" height="680" aria-label="语音厅状态中的形象"></canvas>
+      <img id="poster" src="../avatar/character/source.png" alt="">
+      <p class="jump">点击形象，跳到下一个状态</p>
+      <div id="away" hidden><strong>暂时离开</strong><span>回来后点其他状态即可继续</span></div>
+    </div>
+    <div>
+      <section class="panel" aria-label="厅内状态">
+        <h2>当前状态</h2>
+        <div class="states" role="group">
+          <button type="button" data-hall="speak" disabled>说话</button>
+          <button type="button" data-hall="listen" disabled>倾听</button>
+          <button type="button" data-hall="welcome" disabled>欢迎</button>
+          <button type="button" data-hall="thanks" disabled>感谢</button>
+          <button type="button" data-hall="sing" disabled>演唱</button>
+          <button type="button" data-hall="leave" disabled>离开</button>
+        </div>
+        <p id="note" class="note" role="status">正在打开示例形象…</p>
+      </section>
+      <section class="panel picker">
+        <div class="row"><h2>换成你的图</h2><label class="upload">上传图片<input id="upload" type="file" accept="image/png,image/jpeg,image/webp"></label></div>
+        <div id="gallery" class="strip" aria-label="已生成的形象"></div>
+        <p id="libraryNote" class="small">下面是这个浏览器里照片生图的最近记录。</p>
+        <a id="fixLink" class="fix" href="/avatar/" hidden>五官不准，去面捕页校正</a>
+      </section>
+    </div>
+  </div>
+</main>
+<script src="../shared/portrait-store.js?v=11"></script>
+<script src="../avatar/mesh-bridge.js?v=12"></script>
+<script type="module" src="./hall.mjs?v=3"></script>
+</body>
+</html>

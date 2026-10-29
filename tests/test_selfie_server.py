@@ -121,6 +121,8 @@ class SelfieServerTests(unittest.TestCase):
             self.assertIn("实时面捕", page)
             self.assertIn('href="/avatar/"', page)
             self.assertIn('href="/selfie/"', page)
+            self.assertIn('href="/hall/"', page)
+            self.assertIn("语音厅状态", page)
             with urllib.request.urlopen(base + "/selfie/") as response:
                 selfie = response.read().decode("utf-8")
             self.assertIn("library.js", selfie)

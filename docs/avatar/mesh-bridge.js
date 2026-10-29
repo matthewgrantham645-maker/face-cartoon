@@ -13,13 +13,16 @@
     let yaw=Math.tanh(bound(p.yaw,-1,1)*1.6),pitch=Math.tanh(bound(p.pitch,-1,1)*1.6);
     const combined=Math.max(1,Math.hypot(yaw,pitch));yaw/=combined;pitch/=combined;
     const angleX=yaw*30*strength,angleY=-pitch*24*strength,angleZ=bound(p.roll,-1,1)*24,follow=bound(bodyFollow,0,.5,0);
+    const smile=bound(p.smile,-1,1),pucker=bound(p.pucker,0,1),browL=bound(p.browL,-1,1),browR=bound(p.browR,-1,1);
     return {angleX,angleY,angleZ,
       eyeROpen:bound(p.eyeL,0,1,1),eyeLOpen:bound(p.eyeR,0,1,1),
-      eyeSmile:Math.max(0,bound(p.smile,-1,1))*.3,
+      eyeSmile:Math.min(1,Math.max(0,smile)*.75+bound(p.squint,0,1)*.45),
       gazeX:bound(p.gazeX,-1,1),gazeY:bound(p.gazeY,-1,1),
-      mouthOpen:bound(p.mouth,0,1),mouthForm:bound(bound(p.pucker,0,1)*.9-bound(p.smile,-1,1)*.45,-1,1),
-      browY:bound((bound(p.brow,-1,1)+bound(p.browL,-1,1)+bound(p.browR,-1,1))*.5,-1,1),
-      browAngle:0,bodyAngleX:bound(angleX*follow,-10,10),bodyAngleZ:bound(angleZ*follow,-10,10),breath:0,blush:0,armAngle:0,handAngle:0,fingerTap:0};
+      mouthOpen:bound(p.mouth,0,1),mouthForm:bound(pucker*.9-smile*.45,-1,1),
+      browY:bound(bound(p.brow,-1,1)+(browL+browR)*.5,-1,1),
+      browAngle:bound(browL-browR,-1,1)*.6,
+      smile,pucker,
+      bodyAngleX:bound(angleX*follow,-10,10),bodyAngleZ:bound(angleZ*follow,-10,10),breath:0,blush:0,armAngle:0,handAngle:0,fingerTap:0};
   }
   root.AvatarMeshBridge={mapPose};if(typeof module!=='undefined'&&module.exports)module.exports={mapPose};
 })(typeof window!=='undefined'?window:globalThis);
